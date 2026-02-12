@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "RSS Reader",
+  "version": "1.0.1",
+  "description": "A modern RSS feed reader with powerful features",
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "options_page": "options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuxyx/K0pMDwpkY8nJB7DAw+FL0NY3PUIuWtb625ks16jWCkJf1hhG36AgFa4lQO9rAP0stYXmpadO7OBLAjfTEMrGxVTwS+XpSO7Kdk5zV3h3Zvzi85QSgJVPpWhn+uiGeqTWrr38FJhxvo3OhY5HOCDgmBXV6sgmQe7MwXMmVYcVVvV3eWIwSvmyekZFrYwg2LIW/eepOHIyx+C8f9FUCRNPsoc3LCIkG+kKXMZT9qHTCOO58xAeBLkKyn/nFqF3GcF1W6dLVw6erh5udo+KxAJHBiCqi0hB470HX5cZxfRWeFyAaXbK4UM9Zkek09UNCaRgmv4MWJjVdrRsJb/BwIDAQAB"
+}

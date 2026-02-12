@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>RSS Reader Subscriptions</title>
+    <dateCreated>Thu, 12 Feb 2026 07:33:56 GMT</dateCreated>
+    <dateModified>Thu, 12 Feb 2026 07:33:56 GMT</dateModified>
+  </head>
+  <body>
+    
+    <!-- AI 资讯 -->
+    <outline text="AI 资讯">
+      <outline type="rss" text="机器之心" title="机器之心" xmlUrl="https://www.jiqizhixin.com/rss" htmlUrl="https://www.jiqizhixin.com/" description="机器之心" />
+      <outline type="rss" text="量子位" title="量子位" xmlUrl="https://www.qbitai.com/feed" htmlUrl="https://www.qbitai.com" description="追踪人工智能新趋势，报道科技行业新突破" />
+      <outline type="rss" text="微软研究院AI头条" title="微软研究院AI头条" xmlUrl="https://plink.anyfeeder.com/weixin/MSRAsia" htmlUrl="http://weixin.sogou.com/weixin?type=1&amp;s_from=input&amp;query=%E5%BE%AE%E8%BD%AF%E7%A0%94%E7%A9%B6%E9%99%A2AI%E5%A4%B4%E6%9D%A1" description="专注科研18年，盛产黑科技" />
+      <outline type="rss" text="三花 AI 快讯" title="三花 AI 快讯" xmlUrl="https://sanhua.himrr.com/daily-news/feed" htmlUrl="https://sanhua.himrr.com" description="一觉醒来看三花，分分钟 Get 全网 AI 动态" />
+    </outline>
+
+    <!-- 前端技术 -->
+    <outline text="前端技术">
+      <outline type="rss" text="React Status" title="React Status" xmlUrl="https://cprss.s3.amazonaws.com/react.statuscode.com.xml" htmlUrl="https://react.statuscode.com/" description="A weekly roundup of the latest React and React Native links and tutorials." />
+      <outline type="rss" text="JavaScript Weekly" title="JavaScript Weekly" xmlUrl="https://cprss.s3.amazonaws.com/javascriptweekly.com.xml" htmlUrl="https://javascriptweekly.com/" description="A newsletter of JavaScript articles, news and cool projects" />
+      <outline type="rss" text="CSS-Tricks" title="CSS-Tricks" xmlUrl="https://css-tricks.com/feed/" htmlUrl="https://css-tricks.com" description="Tips, Tricks, and Techniques on using Cascading Style Sheets." />
+      <outline type="rss" text="张鑫旭-鑫空间-鑫生活" title="张鑫旭-鑫空间-鑫生活" xmlUrl="https://www.zhangxinxu.com/wordpress/feed/" htmlUrl="https://www.zhangxinxu.com/wordpress" description="it's my whole life!" />
+      <outline type="rss" text="overreacted — A blog by Dan Abramov" title="overreacted — A blog by Dan Abramov" xmlUrl="https://overreacted.io/rss.xml" htmlUrl="https://overreacted.io/" description="A blog by Dan Abramov" />
+      <outline type="rss" text="Web Dev Simplified Blog" title="Web Dev Simplified Blog" xmlUrl="https://blog.webdevsimplified.com/rss.xml" htmlUrl="https://blog.webdevsimplified.com/" description="In depth articles with interactive examples about every web dev topic." />
+      <outline type="rss" text="javascriptkicks.com" title="javascriptkicks.com" xmlUrl="https://javascriptkicks.com/feeds/rss" htmlUrl="https://javascriptkicks.com/" description="The latest published stories from JavaScriptKicks.com" />
+      <outline type="rss" text="前端精读评论 - 知乎专栏" title="前端精读评论 - 知乎专栏" xmlUrl="https://rss.lilydjwg.me/zhihuzhuanlan/FrontendPerusal" htmlUrl="https://zhuanlan.zhihu.com/FrontendPerusal" />
+      <outline type="rss" text="蚊子的前端博客" title="蚊子的前端博客" xmlUrl="https://www.xiabingbao.com/atom.xml" htmlUrl="https://www.xiabingbao.com" description="蚊子在前端开发工作中的总结，梳理思路，沉淀自己；学习新技术，记录过程，也可以帮助和我一样的同学更快的学习，分享" />
+    </outline>
+
+    <!-- 技术团队/大厂 -->
+    <outline text="技术团队/大厂">
+      <outline type="rss" text="美团技术团队" title="美团技术团队" xmlUrl="https://tech.meituan.com/feed/" htmlUrl="https://tech.meituan.com/feed/" description="美团技术团队最近更新内容。" />
+      <outline type="rss" text="字节跳动技术团队官方博客" title="字节跳动技术团队官方博客" xmlUrl="https://blog.csdn.net/ByteDanceTech/rss/list" htmlUrl="https://blog.csdn.net/ByteDanceTech" />
+      <outline type="rss" text="AlloyTeam" title="AlloyTeam" xmlUrl="http://www.alloyteam.com/feed/" htmlUrl="http://www.alloyteam.com" description="腾讯全端 AlloyTeam 团队 Blog" />
+      <outline type="rss" text="Netflix TechBlog - Medium" title="Netflix TechBlog - Medium" xmlUrl="https://netflixtechblog.com/feed" htmlUrl="https://netflixtechblog.com?source=rss----2615bd06b42e---4" description="Learn about Netflix's world class engineering efforts, company culture, product developments and more. - Medium" />
+    </outline>
+
+    <!-- 个人博客 -->
+    <outline text="个人博客">
+      <outline type="rss" text="阮一峰的网络日志" title="阮一峰的网络日志" xmlUrl="http://www.ruanyifeng.com/blog/atom.xml" htmlUrl="http://www.ruanyifeng.com/blog/" description="Ruan YiFeng's Blog" />
+      <outline type="rss" text="面向信仰编程" title="面向信仰编程" xmlUrl="https://draveness.me/feed.xml" htmlUrl="https://draven.co/" description="面向信仰编程" />
+      <outline type="rss" text="唐巧的博客" title="唐巧的博客" xmlUrl="https://blog.devtang.com/atom.xml" htmlUrl="https://blog.devtang.com/" description="记录下自己学习的点滴" />
+      <outline type="rss" text="涛叔" title="涛叔" xmlUrl="https://taoshu.in/feed.xml" htmlUrl="https://tao.zz.ac" />
+      <outline type="rss" text="Paul Irish" title="Paul Irish" xmlUrl="http://feeds.feedburner.com/paul-irish?format=xml" htmlUrl="https://paulirish.com/" />
+      <outline type="rss" text="Blog | Phodal - A Growth Engineer" title="Blog | Phodal - A Growth Engineer" xmlUrl="https://www.phodal.com/blog/feeds/rss/" htmlUrl="http://www.phodal.com/blog/" description="Blog" />
+    </outline>
+
+    <!-- 综合技术/社区 -->
+    <outline text="综合技术/社区">
+      <outline type="rss" text="少数派" title="少数派" xmlUrl="https://sspai.com/feed" htmlUrl="https://sspai.com" description="少数派致力于更好地运用数字产品或科学方法，帮助用户提升工作效率和生活品质" />
+      <outline type="rss" text="爱范儿" title="爱范儿" xmlUrl="https://www.ifanr.com/feed" htmlUrl="https://www.ifanr.com?utm_source=rss&amp;utm_medium=rss&amp;utm_campaign=" description="关注明日产品的数字潮牌" />
+      <outline type="rss" text="InfoQ" title="InfoQ - 促进软件开发领域知识与创新的传播" xmlUrl="https://www.infoq.cn/feed" htmlUrl="https://www.infoq.cn" description="InfoQ 是一个实践驱动的社区资讯站点，致力于促进软件开发领域知识与创新的传播。" />
+      <outline type="rss" text="HelloGitHub 月刊" title="HelloGitHub 月刊" xmlUrl="https://hellogithub.com/rss" htmlUrl="https://hellogithub.com" description="HelloGitHub 是一个分享有趣、 入门级开源项目的平台。" />
+      <outline type="rss" text="Articles on Smashing Magazine" title="Articles on Smashing Magazine — For Web Designers And Developers" xmlUrl="https://www.smashingmagazine.com/feed/" htmlUrl="https://www.smashingmagazine.com/" description="Recent content in Articles on Smashing Magazine — For Web Designers And Developers" />
+      <outline type="rss" text="Node Weekly" title="Node Weekly" xmlUrl="https://cprss.s3.amazonaws.com/nodeweekly.com.xml" htmlUrl="https://nodeweekly.com/" description="A free, once–weekly e-mail round-up of Node.js news and articles." />
+      <outline type="rss" text="Linux Tips" title="Linux Tips, Tricks and Tutorials on Linuxize" xmlUrl="https://linuxize.com/index.xml" htmlUrl="https://linuxize.com/" description="Recent content in Linux Tips, Tricks and Tutorials on Linuxize" />
+    </outline>
+
+  </body>
+</opml>

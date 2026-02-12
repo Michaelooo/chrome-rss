@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --border: 214.3 31.8% 91.4%;
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+}
+
+@layer components {
+  .article-content {
+    @apply max-w-none leading-relaxed text-gray-800 dark:text-gray-200;
+  }
+
+  /* 早报类文章的导航目录样式优化 - 必须放在通用规则之前 */
+  .article-content > p:nth-child(-n+12) {
+    @apply my-1 !important;
+  }
+
+  .article-content :where(p, ul, ol, pre, table, blockquote, img, video, iframe, figure) {
+    @apply my-4;
+  }
+
+  .article-content :where(h1, h2, h3, h4) {
+    @apply mt-8 mb-4 font-semibold text-gray-900 dark:text-gray-100;
+  }
+
+  .article-content h1 {
+    @apply text-3xl;
+  }
+
+  .article-content h2 {
+    @apply text-2xl;
+  }
+
+  .article-content h3 {
+    @apply text-xl;
+  }
+
+  .article-content h4 {
+    @apply text-lg;
+  }
+
+  /* 覆盖 p 的通用规则，确保前12个段落使用紧凑间距 */
+  .article-content > p:nth-child(-n+12) {
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .article-content pre {
+    @apply my-6 overflow-x-auto rounded-xl bg-gray-900 px-4 py-3 text-sm leading-relaxed text-gray-100 shadow-inner dark:bg-gray-950;
+  }
+
+  .article-content pre.article-code-block {
+    @apply my-0 h-full min-h-[48px] rounded-none border-0 bg-transparent px-5 py-4 text-sm leading-relaxed text-gray-100 shadow-none dark:text-gray-100;
+  }
+
+  .article-content code:not(pre code) {
+    @apply rounded bg-gray-100 px-2 py-0.5 text-sm font-medium text-gray-800 dark:bg-gray-800 dark:text-gray-100;
+  }
+
+  .article-content blockquote {
+    @apply my-6 border-l-4 border-primary-200 bg-primary-50 px-4 py-2 italic text-gray-600 dark:border-primary-700 dark:bg-primary-900 dark:text-gray-300;
+  }
+
+  .article-content table {
+    @apply my-6 w-full overflow-hidden rounded-lg border border-gray-200 text-sm dark:border-gray-700;
+  }
+
+  .article-content th {
+    @apply bg-gray-100 font-semibold dark:bg-gray-800;
+  }
+
+  .article-content th,
+  .article-content td {
+    @apply border border-gray-200 px-3 py-2 align-top dark:border-gray-700;
+  }
+
+  .article-link {
+    @apply inline-flex items-center gap-1 text-primary-600 transition-colors hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-200;
+  }
+
+  .article-image {
+    @apply my-6 w-full rounded-xl object-contain shadow-sm transition-transform duration-200 cursor-zoom-in;
+  }
+
+  .article-image:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 45px -18px rgba(15, 23, 42, 0.35);
+  }
+
+  .article-media,
+  .article-embed {
+    @apply my-6 w-full rounded-xl border border-gray-200 dark:border-gray-700;
+  }
+
+  .article-media {
+    @apply bg-black;
+  }
+
+  .article-embed {
+    min-height: 280px;
+  }
+
+  .article-math {
+    @apply my-6 overflow-x-auto rounded-lg bg-gray-50 p-4 text-base leading-relaxed dark:bg-gray-800 dark:text-gray-100;
+  }
+
+  .article-code {
+    @apply font-mono;
+  }
+
+  .article-code-container {
+    @apply my-6 overflow-hidden rounded-xl border border-gray-200 bg-gray-950 text-gray-100 shadow-lg dark:border-gray-700 dark:bg-gray-900;
+  }
+
+  .article-code-toolbar {
+    @apply flex items-center justify-between gap-2 border-b border-white/10 bg-white/10 px-5 py-2 text-xs uppercase tracking-wide text-gray-100 backdrop-blur dark:border-white/5;
+  }
+
+  .article-code-badge {
+    @apply rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-semibold text-gray-200 dark:bg-white/10 dark:text-gray-100;
+  }
+
+  .article-code-copy {
+    @apply rounded-md border border-white/20 bg-white/10 px-2 py-1 text-[11px] font-medium text-gray-100 transition-colors hover:border-white/30 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary-400/60 dark:border-white/15 dark:bg-white/10 dark:hover:border-white/25 dark:hover:bg-white/20;
+  }
+
+  /* 文章内链接样式 - 为导航区域的链接添加主题色 */
+  .article-content > p a {
+    @apply text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300;
+    text-underline-offset: 2px;
+  }
+
+  /* 第一个 h3 标题前添加分隔线，区分导航目录和正文 */
+  .article-content > h3:first-of-type {
+    @apply mt-8 pt-6 border-t border-gray-200 dark:border-gray-700;
+  }
+}

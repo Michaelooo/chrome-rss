@@ -1,0 +1,128 @@
+// Core data types
+
+export interface Feed {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  link?: string;
+  favicon?: string;
+  folderId?: string;
+  sortOrder?: number;
+  updateInterval: number; // in minutes
+  lastFetchTime: number;
+  lastFetchStatus: 'success' | 'error' | 'pending';
+  lastFetchError?: string;
+  unreadCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Article {
+  id: string;
+  feedId: string;
+  title: string;
+  link: string;
+  description?: string;
+  content?: string;
+  author?: string;
+  pubDate: number;
+  guid: string;
+  isRead: boolean;
+  isStarred: boolean;
+  readAt?: number;
+  starredAt?: number;
+  translations?: Record<string, ArticleTranslation>;
+  createdAt: number;
+}
+
+export interface ArticleTranslation {
+  contentHtml: string;
+  translatedAt: number;
+  provider: 'google';
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  parentId?: string;
+  order: number;
+  isExpanded: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface FeedFilter {
+  id: string;
+  feedId?: string; // if undefined, applies globally
+  name: string;
+  enabled: boolean;
+  filterType: 'include' | 'exclude';
+  matchType: 'title' | 'content' | 'author' | 'all';
+  pattern: string;
+  isRegex: boolean;
+  actions: FilterAction[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface FilterAction {
+  type: 'mark-read' | 'mark-starred' | 'delete' | 'move-to-folder';
+  value?: string; // for move-to-folder, the folder id
+}
+
+export interface Settings {
+  theme: 'light' | 'dark' | 'auto';
+  defaultUpdateInterval: number;
+  enableNotifications: boolean;
+  maxArticlesPerFeed: number;
+  articleRetentionDays: number;
+  openLinksInNewTab: boolean;
+  markAsReadOnScroll: boolean;
+  fontSize: 'small' | 'medium' | 'large' | 'xlarge';
+  fontFamily: string;
+  contentWidth: 'narrow' | 'standard' | 'wide' | 'xwide';
+  compactView: boolean;
+  showFeedIcons: boolean;
+  enableKeyboardShortcuts: boolean;
+  enableTranslation: boolean;
+  translationProvider: 'google';
+  translationTargetLanguage: string;
+  translationSourceLanguage?: string;
+  translationAutoFetch: boolean;
+}
+
+// RSS Feed types
+export interface RSSFeed {
+  title: string;
+  description?: string;
+  link?: string;
+  items: RSSItem[];
+}
+
+export interface RSSItem {
+  title: string;
+  link: string;
+  description?: string;
+  content?: string;
+  author?: string;
+  pubDate?: string;
+  guid?: string;
+}
+
+// UI State types
+export type ViewMode = 'list' | 'compact' | 'card';
+export type SortBy = 'date-desc' | 'date-asc' | 'title' | 'feed';
+export type FilterBy = 'all' | 'unread' | 'starred' | 'today';
+
+export interface UIState {
+  selectedFeedId?: string;
+  selectedFolderId?: string;
+  selectedArticleId?: string;
+  viewMode: ViewMode;
+  sortBy: SortBy;
+  filterBy: FilterBy;
+  searchQuery: string;
+  sidebarWidth: number;
+  articleListWidth: number;
+}
