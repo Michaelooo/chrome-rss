@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Star, Calendar, User, X, Type, Columns } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store';
@@ -8,18 +9,18 @@ import type { Settings } from '@/types';
 import { db } from '@/lib/storage/db';
 import type { Article } from '@/types';
 
-const FONT_SIZE_OPTIONS: { value: Settings['fontSize']; label: string }[] = [
-  { value: 'small', label: '小' },
-  { value: 'medium', label: '标准' },
-  { value: 'large', label: '大' },
-  { value: 'xlarge', label: '超大' },
+const FONT_SIZE_OPTIONS: { value: Settings['fontSize']; tKey: string }[] = [
+  { value: 'small', tKey: 'settings.fontSizeSmall' },
+  { value: 'medium', tKey: 'settings.fontSizeMedium' },
+  { value: 'large', tKey: 'settings.fontSizeLarge' },
+  { value: 'xlarge', tKey: 'settings.fontSizeXLarge' },
 ];
 
-const CONTENT_WIDTH_OPTIONS: { value: Settings['contentWidth']; label: string }[] = [
-  { value: 'narrow', label: '窄' },
-  { value: 'standard', label: '标准' },
-  { value: 'wide', label: '宽' },
-  { value: 'xwide', label: '超宽' },
+const CONTENT_WIDTH_OPTIONS: { value: Settings['contentWidth']; tKey: string }[] = [
+  { value: 'narrow', tKey: 'settings.contentWidthNarrow' },
+  { value: 'standard', tKey: 'settings.contentWidthStandard' },
+  { value: 'wide', tKey: 'settings.contentWidthWide' },
+  { value: 'xwide', tKey: 'settings.contentWidthXWide' },
 ];
 
 const FONT_SIZE_CLASS: Record<Settings['fontSize'], string> = {
@@ -49,7 +50,10 @@ interface CodeBlockCleanupRecord {
   clearTimer: () => void;
 }
 
-const enhanceCodeBlocks = (container: HTMLElement): (() => void) => {
+const enhanceCodeBlocks = (
+  container: HTMLElement,
+  strings: { copy: string; copied: string; failed: string } = { copy: 'Copy', copied: 'Copied', failed: 'Failed' }
+): (() => void) => {
   const records: CodeBlockCleanupRecord[] = [];
 
   const codeBlocks = Array.from(container.querySelectorAll<HTMLPreElement>('pre'));
@@ -86,7 +90,7 @@ const enhanceCodeBlocks = (container: HTMLElement): (() => void) => {
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
     copyButton.className = 'article-code-copy';
-    copyButton.textContent = '复制';
+    copyButton.textContent = strings.copy;
 
     let resetTimer: number | null = null;
     const clearTimer = () => {
@@ -107,7 +111,7 @@ const enhanceCodeBlocks = (container: HTMLElement): (() => void) => {
         copyButton.textContent = label;
         clearTimer();
         resetTimer = window.setTimeout(() => {
-          copyButton.textContent = '复制';
+          copyButton.textContent = strings.copy;
           resetTimer = null;
         }, 2000);
       };
@@ -126,10 +130,10 @@ const enhanceCodeBlocks = (container: HTMLElement): (() => void) => {
           document.execCommand('copy');
           document.body.removeChild(textarea);
         }
-        setStatus('已复制');
+        setStatus(strings.copied);
       } catch (error) {
         console.error('Failed to copy code:', error);
-        setStatus('复制失败');
+        setStatus(strings.failed);
       }
     };
 
@@ -205,6 +209,7 @@ function buildHtmlFromTranslatedText(text: string): string {
 }
 
 export const ArticleReader: React.FC = () => {
+  const { t } = useTranslation();
   const { uiState, settings, updateSettings } = useAppStore();
   const [article, setArticle] = useState<Article | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt?: string } | null>(null);
@@ -327,7 +332,11 @@ export const ArticleReader: React.FC = () => {
     const codeBlocks = Array.from(container.querySelectorAll<HTMLElement>('pre, code, samp, kbd'));
     codeBlocks.forEach(block => block.classList.add('article-code'));
 
-    const cleanupCodeBlocks = enhanceCodeBlocks(container);
+    const cleanupCodeBlocks = enhanceCodeBlocks(container, {
+      copy: t('articleReader.copy'),
+      copied: t('articleReader.copied'),
+      failed: t('articleReader.copyFailed'),
+    });
 
     const mathElements = Array.from(container.querySelectorAll<HTMLElement>('math, .math, .katex-display, .MathJax'));
     mathElements.forEach(el => el.classList.add('article-math'));
@@ -339,7 +348,7 @@ export const ArticleReader: React.FC = () => {
       });
       cleanupCodeBlocks();
     };
-  }, [article]);
+  }, [article, t]);
 
   useEffect(() => {
     if (!previewImage) return;
@@ -394,7 +403,7 @@ export const ArticleReader: React.FC = () => {
     }
 
     if (!article.content && !article.description) {
-      setTranslationError('文章没有可翻译的内容');
+      setTranslationError(t('articleReader.noTranslatableContent'));
       return;
     }
 
@@ -444,7 +453,7 @@ export const ArticleReader: React.FC = () => {
       emitArticleUpdated(article.id, { translations });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : '翻译失败，请稍后重试';
+        error instanceof Error ? error.message : t('articleReader.translationFailed');
       setTranslationError(message);
     } finally {
       if (signal?.aborted) {
@@ -495,15 +504,15 @@ export const ArticleReader: React.FC = () => {
       return null;
     }
     const translatedAt = new Date(activeTranslation.translatedAt);
-    return `已通过 Google Translate 翻译 · ${translatedAt.toLocaleString()}${
-      detectedSourceLanguage ? ` · 原文语言：${detectedSourceLanguage.toUpperCase()}` : ''
+    return `${t('articleReader.translatedByGoogle')} \u00b7 ${translatedAt.toLocaleString()}${
+      detectedSourceLanguage ? ` \u00b7 ${t('articleReader.detectedLang', { lang: detectedSourceLanguage.toUpperCase() })}` : ''
     }`;
   }, [showTranslation, activeTranslation, detectedSourceLanguage]);
 
   if (!article) {
     return (
       <div className="h-full flex items-center justify-center text-gray-500">
-        选择一篇文章阅读
+        {t('articleReader.selectArticle')}
       </div>
     );
   }
@@ -519,7 +528,7 @@ export const ArticleReader: React.FC = () => {
               <div className="flex items-center gap-3">
                 {!article.isRead && (
                   <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                    未读
+                    {t('articleReader.unread')}
                   </span>
                 )}
                 {article.author && (
@@ -544,7 +553,7 @@ export const ArticleReader: React.FC = () => {
                     rel="noopener noreferrer"
                     className="article-link"
                   >
-                    查看原文
+                    {t('articleReader.viewOriginal')}
                   </a>
                 )}
               </div>
@@ -559,19 +568,19 @@ export const ArticleReader: React.FC = () => {
                   title={
                     activeTranslation
                       ? showTranslation
-                        ? '查看原文'
-                        : '查看翻译'
-                      : '翻译文章'
+                        ? t('articleReader.viewOriginalTranslated')
+                        : t('articleReader.viewTranslated')
+                      : t('articleReader.translate')
                   }
                   disabled={isTranslating}
                 >
                   {activeTranslation
                     ? showTranslation
-                      ? '查看原文'
-                      : '查看翻译'
+                      ? t('articleReader.viewOriginalTranslated')
+                      : t('articleReader.viewTranslated')
                     : isTranslating
-                      ? '翻译中...'
-                      : '翻译'}
+                      ? t('articleReader.translating')
+                      : t('articleReader.translate')}
                 </Button>
               )}
 
@@ -580,11 +589,11 @@ export const ArticleReader: React.FC = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    title="字号"
+                    title={t('articleReader.fontSize')}
                     className="gap-1"
                   >
                     <Type className="h-4 w-4" />
-                    字号
+                    {t('articleReader.fontSize')}
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
@@ -603,7 +612,7 @@ export const ArticleReader: React.FC = () => {
                         }`}
                         onSelect={() => updateSettings({ fontSize: opt.value })}
                       >
-                        {opt.label}
+                        {t(opt.tKey)}
                       </DropdownMenu.Item>
                     ))}
                   </DropdownMenu.Content>
@@ -615,11 +624,11 @@ export const ArticleReader: React.FC = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    title="内容宽度"
+                    title={t('articleReader.width')}
                     className="gap-1"
                   >
                     <Columns className="h-4 w-4" />
-                    宽度
+                    {t('articleReader.width')}
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
@@ -638,7 +647,7 @@ export const ArticleReader: React.FC = () => {
                         }`}
                         onSelect={() => updateSettings({ contentWidth: opt.value })}
                       >
-                        {opt.label}
+                        {t(opt.tKey)}
                       </DropdownMenu.Item>
                     ))}
                   </DropdownMenu.Content>
@@ -649,7 +658,7 @@ export const ArticleReader: React.FC = () => {
                 variant="ghost"
                 size="sm"
                 onClick={handleToggleStar}
-                title={article.isStarred ? '取消星标' : '标记星标'}
+                title={article.isStarred ? t('articleReader.unstar') : t('articleReader.star')}
               >
                 <Star
                   className={`h-5 w-5 transition-colors ${
@@ -662,7 +671,7 @@ export const ArticleReader: React.FC = () => {
                 variant="ghost"
                 size="sm"
                 onClick={handleOpenLink}
-                title="在新标签页打开"
+                title={t('articleReader.openInNewTab')}
               >
                 <ExternalLink className="h-5 w-5" />
               </Button>
@@ -696,7 +705,7 @@ export const ArticleReader: React.FC = () => {
               }}
             />
           ) : (
-            <p className="text-gray-500">暂无内容</p>
+            <p className="text-gray-500">{t('articleReader.noContent')}</p>
           )}
         </div>
       </ScrollArea>
@@ -711,13 +720,13 @@ export const ArticleReader: React.FC = () => {
           <button
             className="absolute right-6 top-6 text-white transition-opacity hover:opacity-75"
             onClick={closePreview}
-            aria-label="关闭图片预览"
+            aria-label={t('articleReader.closeImagePreview')}
           >
             <X className="h-6 w-6" />
           </button>
           <img
             src={previewImage.src}
-            alt={previewImage.alt || '文章媒体预览'}
+            alt={previewImage.alt || t('articleReader.imagePreviewAlt')}
             className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
           />
         </div>

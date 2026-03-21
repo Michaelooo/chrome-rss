@@ -1,50 +1,67 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { useAppStore } from '@/store';
+import type { Feed } from '@/types';
+import { updateFeed } from '@/lib/storage/db';
 
-interface AddFolderDialogProps {
+interface EditFeedDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFolderAdded: () => void;
+  feed: Feed | null;
+  onSaved: () => void;
 }
 
-export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
+export const EditFeedDialog: React.FC<EditFeedDialogProps> = ({
   open,
   onOpenChange,
-  onFolderAdded,
+  feed,
+  onSaved,
 }) => {
   const { t } = useTranslation();
-  const { addFolder, folders } = useAppStore();
   const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (feed) {
+      setName(feed.title);
+      setUrl(feed.url);
+      setError('');
+    }
+  }, [feed, open]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setError(t('addFolder.nameRequired'));
+    if (!feed) return;
+
+    const trimmedName = name.trim();
+    const trimmedUrl = url.trim();
+
+    if (!trimmedName || !trimmedUrl) {
+      setError(t('editFeed.nameUrlRequired'));
+      return;
+    }
+
+    try {
+      new URL(trimmedUrl);
+    } catch {
+      setError(t('editFeed.urlInvalid'));
       return;
     }
 
     setLoading(true);
+    setError('');
     try {
-      await addFolder({
-        name: trimmed,
-        order: folders.length,
-        isExpanded: true,
-      });
-      setName('');
+      await updateFeed(feed.id, { title: trimmedName, url: trimmedUrl });
       onOpenChange(false);
-      onFolderAdded();
+      onSaved();
     } catch (err) {
-      console.error('Failed to add folder:', err);
-      setError(t('addFolder.createFailed'));
+      console.error('Failed to update feed:', err);
+      setError(t('editFeed.saveFailed'));
     } finally {
       setLoading(false);
     }
@@ -57,7 +74,7 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 w-full max-w-md z-50">
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              {t('addFolder.title')}
+              {t('editFeed.title')}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -67,24 +84,41 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
           </div>
 
           <Dialog.Description className="sr-only">
-            {t('addFolder.description')}
+            {t('editFeed.description')}
           </Dialog.Description>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
-                htmlFor="folder-name"
+                htmlFor="feed-name"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
-                {t('addFolder.nameLabel')}
+                {t('editFeed.nameLabel')}
               </label>
               <Input
-                id="folder-name"
+                id="feed-name"
                 type="text"
-                placeholder={t('addFolder.namePlaceholder')}
+                placeholder={t('editFeed.namePlaceholder')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="feed-url-edit"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
+                {t('editFeed.urlLabel')}
+              </label>
+              <Input
+                id="feed-url-edit"
+                type="url"
+                placeholder="https://example.com/feed.xml"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                required
               />
             </div>
 
@@ -102,7 +136,7 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
                 {t('common.cancel')}
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? t('addFolder.creating') : t('addFolder.create')}
+                {loading ? t('editFeed.saving') : t('editFeed.save')}
               </Button>
             </div>
           </form>

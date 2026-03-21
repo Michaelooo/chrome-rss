@@ -41,6 +41,26 @@ interface AppStore {
   moveFeedToFolder: (feedId: string, folderId?: string) => Promise<void>;
 }
 
+const LAYOUT_STORAGE_KEY = 'rss-layout-widths';
+
+function loadLayoutWidths(): { sidebarWidth: number; articleListWidth: number } {
+  try {
+    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return { sidebarWidth: 280, articleListWidth: 400 };
+}
+
+function saveLayoutWidths(sidebarWidth: number, articleListWidth: number) {
+  try {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ sidebarWidth, articleListWidth }));
+  } catch {
+    // ignore
+  }
+}
+
 export const useAppStore = create<AppStore>((set) => ({
   // Initial state
   feeds: [],
@@ -54,10 +74,9 @@ export const useAppStore = create<AppStore>((set) => ({
     selectedArticleId: undefined,
     viewMode: 'list',
     sortBy: 'date-desc',
-    filterBy: 'all',
+    filterBy: 'unread',
     searchQuery: '',
-    sidebarWidth: 280,
-    articleListWidth: 400,
+    ...loadLayoutWidths(),
   },
 
   isLoadingFeeds: false,
@@ -93,16 +112,26 @@ export const useAppStore = create<AppStore>((set) => ({
   loadSettings: async () => {
     try {
       const settings = await getSettings();
-      set({ settings });
+      set((state) => ({
+        settings,
+        uiState: {
+          ...state.uiState,
+          filterBy: settings.defaultArticleFilter ?? 'all',
+        },
+      }));
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
   },
 
   setUIState: (updates) => {
-    set((state) => ({
-      uiState: { ...state.uiState, ...updates },
-    }));
+    set((state) => {
+      const next = { ...state.uiState, ...updates };
+      if (updates.sidebarWidth !== undefined || updates.articleListWidth !== undefined) {
+        saveLayoutWidths(next.sidebarWidth, next.articleListWidth);
+      }
+      return { uiState: next };
+    });
   },
 
   updateSettings: async (updates) => {

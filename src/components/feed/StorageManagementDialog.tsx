@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { HardDrive, Trash2, Calendar, Star } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { db, deleteOldArticles } from '@/lib/storage/db';
 
@@ -23,34 +24,20 @@ interface StorageManagementDialogProps {
   onCompleted?: () => void;
 }
 
-const CLEANUP_OPTIONS: CleanupOption[] = [
-  {
-    label: '1个月前',
-    days: 30,
-    description: '删除30天前的文章（保留收藏）'
-  },
-  {
-    label: '3个月前',
-    days: 90,
-    description: '删除90天前的文章（保留收藏）'
-  },
-  {
-    label: '半年前',
-    days: 180,
-    description: '删除180天前的文章（保留收藏）'
-  },
-  {
-    label: '1年前',
-    days: 365,
-    description: '删除365天前的文章（保留收藏）'
-  }
-];
+const CLEANUP_DAYS = [30, 90, 180, 365];
 
 export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = ({
   open,
   onOpenChange,
   onCompleted
 }) => {
+  const { t } = useTranslation();
+  const cleanupOptions = useMemo<CleanupOption[]>(() => [
+    { days: 30,  label: t('storage.cleanup30Label'),  description: t('storage.cleanup30Desc') },
+    { days: 90,  label: t('storage.cleanup90Label'),  description: t('storage.cleanup90Desc') },
+    { days: 180, label: t('storage.cleanup180Label'), description: t('storage.cleanup180Desc') },
+    { days: 365, label: t('storage.cleanup365Label'), description: t('storage.cleanup365Desc') },
+  ], [t]);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState<number | null>(null);
@@ -95,7 +82,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
   };
 
   const handleCleanup = async (days: number) => {
-    const confirmMessage = `确定要删除${days}天前的文章吗？\n\n注意：\n- 收藏的文章不会被删除\n- 此操作无法撤销\n- 删除后将释放存储空间`;
+    const confirmMessage = t('storage.confirmCleanup', { days });
 
     if (!confirm(confirmMessage)) {
       return;
@@ -105,7 +92,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
       setCleanupLoading(days);
       const deletedCount = await deleteOldArticles(days);
 
-      alert(`成功删除了 ${deletedCount} 篇文章，释放了存储空间`);
+      alert(t('storage.cleanupSuccess', { count: deletedCount }));
 
       // 重新获取存储信息
       await fetchStorageInfo();
@@ -114,7 +101,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
       onCompleted?.();
     } catch (error) {
       console.error('清理数据失败:', error);
-      alert('清理数据失败，请稍后重试');
+      alert(t('storage.cleanupFailed'));
     } finally {
       setCleanupLoading(null);
     }
@@ -141,9 +128,9 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
 
       // 获取各个时间段的文章数量
       Promise.all(
-        CLEANUP_OPTIONS.map(async option => {
-          const count = await getArticlesCountForPeriod(option.days);
-          return { days: option.days, count };
+        CLEANUP_DAYS.map(async days => {
+          const count = await getArticlesCountForPeriod(days);
+          return { days, count };
         })
       ).then(results => {
         const counts: Record<number, number> = {};
@@ -163,7 +150,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
         <div className="flex items-center gap-3 p-6 border-b border-gray-200 dark:border-gray-700">
           <HardDrive className="w-5 h-5 text-primary-600 dark:text-primary-400" />
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            存储空间管理
+            {t('storage.title')}
           </h2>
           <button
             onClick={() => onOpenChange(false)}
@@ -180,7 +167,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
               <div className="flex items-center gap-2 mb-2">
                 <Calendar className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  文章总数
+                  {t('storage.totalArticles')}
                 </span>
               </div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -192,7 +179,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
               <div className="flex items-center gap-2 mb-2">
                 <Star className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  收藏文章
+                  {t('storage.starredArticles')}
                 </span>
               </div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -204,7 +191,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
               <div className="flex items-center gap-2 mb-2">
                 <HardDrive className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  估算大小
+                  {t('storage.estimatedSize')}
                 </span>
               </div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -216,14 +203,14 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
               <div className="flex items-center gap-2 mb-2">
                 <Calendar className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  数据范围
+                  {t('storage.dataRange')}
                 </span>
               </div>
               <div className="text-sm text-gray-900 dark:text-gray-100">
                 {loading ? '...' : (
                   storageInfo?.oldestArticle && storageInfo?.newestArticle ? (
                     `${storageInfo.oldestArticle.toLocaleDateString()} - ${storageInfo.newestArticle.toLocaleDateString()}`
-                  ) : '暂无数据'
+                  ) : t('storage.noData')
                 )}
               </div>
             </div>
@@ -232,10 +219,10 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
           {/* 清理选项 */}
           <div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-              清理选项
+              {t('storage.cleanupTitle')}
             </h3>
             <div className="space-y-3">
-              {CLEANUP_OPTIONS.map((option) => (
+              {cleanupOptions.map((option) => (
                 <div
                   key={option.days}
                   className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
@@ -249,7 +236,7 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
                     </div>
                     {periodCounts[option.days] !== undefined && (
                       <div className="text-xs text-gray-500 mt-1">
-                        约 {periodCounts[option.days].toLocaleString()} 篇文章可被清理
+                      {t('storage.cleanupPeriod', { count: periodCounts[option.days].toLocaleString() })}
                       </div>
                     )}
                   </div>
@@ -261,11 +248,11 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
                     className="ml-4"
                   >
                     {cleanupLoading === option.days ? (
-                      '清理中...'
+                      t('storage.cleaning')
                     ) : (
                       <>
                         <Trash2 className="w-4 h-4 mr-2" />
-                        清理
+                        {t('storage.clean')}
                       </>
                     )}
                   </Button>
@@ -277,13 +264,13 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
           {/* 注意事项 */}
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
             <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
-              注意事项
+              {t('storage.notes')}
             </h4>
             <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
-              <li>• 收藏的文章（星标文章）不会被删除</li>
-              <li>• 删除操作无法撤销，请谨慎操作</li>
-              <li>• 清理后将释放 IndexedDB 存储空间</li>
-              <li>• 建议定期清理以保持应用性能</li>
+              <li>• {t('storage.note1')}</li>
+              <li>• {t('storage.note2')}</li>
+              <li>• {t('storage.note3')}</li>
+              <li>• {t('storage.note4')}</li>
             </ul>
           </div>
         </div>
@@ -293,13 +280,13 @@ export const StorageManagementDialog: React.FC<StorageManagementDialogProps> = (
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            关闭
+            {t('storage.close')}
           </Button>
           <Button
             onClick={fetchStorageInfo}
             disabled={loading}
           >
-            {loading ? '刷新中...' : '刷新信息'}
+            {loading ? t('storage.refreshing') : t('storage.refreshInfo')}
           </Button>
         </div>
       </div>
