@@ -20,6 +20,19 @@ export const MainLayout: React.FC = () => {
     loadSettings();
   }, [loadFeeds, loadFolders, loadSettings]);
 
+  // Reload feeds when background service worker reports new articles
+  useEffect(() => {
+    const listener = (message: { type?: string }) => {
+      if (message?.type === 'FEEDS_UPDATED') {
+        loadFeeds();
+      }
+    };
+    chrome.runtime?.onMessage?.addListener(listener);
+    return () => {
+      chrome.runtime?.onMessage?.removeListener(listener);
+    };
+  }, [loadFeeds]);
+
   // Sync i18n to the language stored in DB settings (handles first load and
   // cases where DB and localStorage are out of sync).
   useEffect(() => {
