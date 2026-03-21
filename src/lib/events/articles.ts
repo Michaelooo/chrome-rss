@@ -6,18 +6,20 @@ export interface ArticleUpdatedDetail {
   id: string;
   updates: Partial<Article>;
   previous?: Partial<Article>;
+  source?: 'scroll' | 'click';
 }
 
 export function emitArticleUpdated(
   id: string,
   updates: Partial<Article>,
-  previous?: Partial<Article>
+  previous?: Partial<Article>,
+  source?: 'scroll' | 'click'
 ): void {
   if (typeof window === 'undefined') {
     return;
   }
 
-  const detail: ArticleUpdatedDetail = { id, updates, previous };
+  const detail: ArticleUpdatedDetail = { id, updates, previous, source };
   window.dispatchEvent(new CustomEvent<ArticleUpdatedDetail>(ARTICLE_UPDATED_EVENT, { detail }));
 }
 

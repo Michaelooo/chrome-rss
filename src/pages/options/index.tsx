@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import { useTranslation } from 'react-i18next';
 import { getSettings, updateSettings } from '@/lib/storage/db';
 import type { Settings } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import i18n, { setStoredLanguage, type AppLanguage } from '@/lib/i18n';
 import '@/index.css';
 
 const Options: React.FC = () => {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -15,52 +18,81 @@ const Options: React.FC = () => {
   }, []);
 
   const loadSettings = async () => {
-    const settings = await getSettings();
-    setSettings(settings);
+    const loaded = await getSettings();
+    setSettings(loaded);
+    // Sync i18next with the persisted language preference
+    if (loaded.language && loaded.language !== i18n.language) {
+      i18n.changeLanguage(loaded.language);
+      setStoredLanguage(loaded.language);
+    }
+  };
+
+  const handleLanguageChange = async (lang: AppLanguage) => {
+    if (!settings) return;
+    const updated = { ...settings, language: lang };
+    setSettings(updated);
+    i18n.changeLanguage(lang);
+    setStoredLanguage(lang);
+    // Persist immediately so the choice survives a page reload without pressing Save
+    await updateSettings({ language: lang });
   };
 
   const handleSave = async () => {
     if (!settings) return;
-
     await updateSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   if (!settings) {
-    return <div className="p-8">加载中...</div>;
+    return <div className="p-8">{t('common.loading')}</div>;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-8">
       <div className="max-w-2xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">
-          设置
+          {t('settings.title')}
         </h1>
 
         <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6 space-y-6">
+          {/* Language */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              {t('settings.language')}
+            </label>
+            <select
+              value={settings.language ?? 'zh'}
+              onChange={(e) => handleLanguageChange(e.target.value as AppLanguage)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
+            >
+              <option value="zh">{t('settings.langZh')}</option>
+              <option value="en">{t('settings.langEn')}</option>
+            </select>
+          </div>
+
           {/* Theme */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              主题
+              {t('settings.theme')}
             </label>
             <select
               value={settings.theme}
               onChange={(e) =>
-                setSettings({ ...settings, theme: e.target.value as any })
+                setSettings({ ...settings, theme: e.target.value as Settings['theme'] })
               }
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
             >
-              <option value="light">浅色</option>
-              <option value="dark">深色</option>
-              <option value="auto">跟随系统</option>
+              <option value="light">{t('settings.themeLight')}</option>
+              <option value="dark">{t('settings.themeDark')}</option>
+              <option value="auto">{t('settings.themeAuto')}</option>
             </select>
           </div>
 
           {/* Update Interval */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              默认更新间隔（分钟）
+              {t('settings.updateInterval')}
             </label>
             <Input
               type="number"
@@ -78,7 +110,7 @@ const Options: React.FC = () => {
           {/* Notifications */}
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              开启通知
+              {t('settings.enableNotifications')}
             </label>
             <input
               type="checkbox"
@@ -93,7 +125,7 @@ const Options: React.FC = () => {
           {/* Max Articles Per Feed */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              每个订阅保留的最大文章数
+              {t('settings.maxArticlesPerFeed')}
             </label>
             <Input
               type="number"
@@ -112,7 +144,7 @@ const Options: React.FC = () => {
           {/* Article Retention */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              文章保留时间（天）
+              {t('settings.articleRetentionDays')}
             </label>
             <Input
               type="number"
@@ -128,15 +160,74 @@ const Options: React.FC = () => {
             />
           </div>
 
+          {/* Default Article Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              {t('settings.defaultArticleFilter')}
+            </label>
+            <select
+              value={settings.defaultArticleFilter ?? 'all'}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  defaultArticleFilter: e.target.value as Settings['defaultArticleFilter'],
+                })
+              }
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
+            >
+              <option value="all">{t('settings.defaultArticleFilterAll')}</option>
+              <option value="unread">{t('settings.defaultArticleFilterUnread')}</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {t('settings.defaultArticleFilterDesc')}
+            </p>
+          </div>
+
           {/* Reading Style */}
           <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              阅读样式
+              {t('settings.readingStyle')}
             </h2>
             <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {t('settings.markAsReadOnScroll')}
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {t('settings.markAsReadOnScrollDesc')}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.markAsReadOnScroll}
+                  onChange={(e) =>
+                    setSettings({ ...settings, markAsReadOnScroll: e.target.checked })
+                  }
+                  className="w-4 h-4"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {t('settings.removeScrollReadInUnreadMode')}
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {t('settings.removeScrollReadInUnreadModeDesc')}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.removeScrollReadInUnreadMode ?? false}
+                  onChange={(e) =>
+                    setSettings({ ...settings, removeScrollReadInUnreadMode: e.target.checked })
+                  }
+                  className="w-4 h-4"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  文章字号
+                  {t('settings.fontSize')}
                 </label>
                 <select
                   value={settings.fontSize}
@@ -148,15 +239,15 @@ const Options: React.FC = () => {
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
                 >
-                  <option value="small">小</option>
-                  <option value="medium">标准</option>
-                  <option value="large">大</option>
-                  <option value="xlarge">超大</option>
+                  <option value="small">{t('settings.fontSizeSmall')}</option>
+                  <option value="medium">{t('settings.fontSizeMedium')}</option>
+                  <option value="large">{t('settings.fontSizeLarge')}</option>
+                  <option value="xlarge">{t('settings.fontSizeXLarge')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  内容宽度
+                  {t('settings.contentWidth')}
                 </label>
                 <select
                   value={settings.contentWidth}
@@ -168,10 +259,10 @@ const Options: React.FC = () => {
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
                 >
-                  <option value="narrow">窄</option>
-                  <option value="standard">标准</option>
-                  <option value="wide">宽</option>
-                  <option value="xwide">超宽</option>
+                  <option value="narrow">{t('settings.contentWidthNarrow')}</option>
+                  <option value="standard">{t('settings.contentWidthStandard')}</option>
+                  <option value="wide">{t('settings.contentWidthWide')}</option>
+                  <option value="xwide">{t('settings.contentWidthXWide')}</option>
                 </select>
               </div>
             </div>
@@ -181,9 +272,11 @@ const Options: React.FC = () => {
           <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">翻译</h2>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {t('settings.translation')}
+                </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  使用浏览器内置的 Google Translate 翻译文章内容。
+                  {t('settings.translationDesc')}
                 </p>
               </div>
               <input
@@ -203,7 +296,7 @@ const Options: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    目标语言（如 zh-CN）
+                    {t('settings.translationTargetLanguage')}
                   </label>
                   <Input
                     value={settings.translationTargetLanguage}
@@ -213,13 +306,13 @@ const Options: React.FC = () => {
                         translationTargetLanguage: e.target.value,
                       })
                     }
-                    placeholder="例如 zh-CN"
+                    placeholder={t('settings.translationTargetPlaceholder')}
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    源语言（可选，留空表示自动检测）
+                    {t('settings.translationSourceLanguage')}
                   </label>
                   <Input
                     value={settings.translationSourceLanguage ?? ''}
@@ -229,13 +322,13 @@ const Options: React.FC = () => {
                         translationSourceLanguage: e.target.value,
                       })
                     }
-                    placeholder="例如 en"
+                    placeholder={t('settings.translationSourcePlaceholder')}
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    打开文章时自动翻译
+                    {t('settings.translationAutoFetch')}
                   </label>
                   <input
                     type="checkbox"
@@ -251,7 +344,7 @@ const Options: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  免费翻译服务存在频率限制，如遇翻译失败请稍后重试。
+                  {t('settings.translationNote')}
                 </p>
               </div>
             )}
@@ -260,7 +353,7 @@ const Options: React.FC = () => {
           {/* Save Button */}
           <div className="pt-4">
             <Button onClick={handleSave} className="w-full">
-              {saved ? '已保存' : '保存设置'}
+              {saved ? t('common.saved') : t('common.save')}
             </Button>
           </div>
         </div>

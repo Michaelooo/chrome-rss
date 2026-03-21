@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { Star, Circle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '@/store';
 import {
   db,
@@ -16,11 +17,33 @@ import { updateUnreadBadge } from '@/lib/chrome/badge';
 import { emitArticleUpdated, subscribeArticleUpdated } from '@/lib/events/articles';
 
 export const ArticleList: React.FC = () => {
-  const { uiState, setUIState, feeds, updateFeedLocal, loadFeeds } = useAppStore();
+  const { t } = useTranslation();
+  const { uiState, setUIState, feeds, updateFeedLocal, loadFeeds, settings } = useAppStore();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(false);
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [singleProcessing, setSingleProcessing] = useState(false);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const markingRef = useRef<Set<string>>(new Set());
+
+  // Stable Scroller reference so Virtuoso never unmounts/remounts its scroll container
+  // (an inline component object would create a new type on every render, resetting scroll to 0).
+  const VirtuosoScroller = useMemo(
+    () =>
+      React.forwardRef<HTMLDivElement>((props, ref) => (
+        <div
+          {...props}
+          ref={(node: HTMLDivElement | null) => {
+            scrollerRef.current = node;
+            if (typeof ref === 'function') ref(node);
+            else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+          }}
+        />
+      )),
+    []
+  );
 
   const feedTitleMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -34,6 +57,9 @@ export const ArticleList: React.FC = () => {
     () => feeds.map(feed => `${feed.id}:${feed.title || feed.url || ''}`).join('|'),
     [feeds]
   );
+
+  const articleMap = useMemo(() => new Map(articles.map(a => [a.id, a])), [articles]);
+
 
   const selectedArticle = uiState.selectedArticleId
     ? articles.find(article => article.id === uiState.selectedArticleId)
@@ -74,7 +100,9 @@ export const ArticleList: React.FC = () => {
         }
 
         if (uiState.filterBy === 'unread' && updates.isRead === true) {
-          next = next.filter(article => article.id !== id);
+          if (settings?.removeScrollReadInUnreadMode) {
+            next = next.filter(article => article.id !== id);
+          }
         }
 
         return next;
@@ -84,7 +112,22 @@ export const ArticleList: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [uiState.filterBy]);
+  }, [uiState.filterBy, settings?.removeScrollReadInUnreadMode]);
+
+  useEffect(() => {
+    if (!settings?.markAsReadOnScroll) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const handle = () => maybeAutoRead();
+    scroller.addEventListener('scroll', handle, { passive: true });
+    // run once on mount/data change
+    requestAnimationFrame(() => maybeAutoRead());
+
+    return () => {
+      scroller.removeEventListener('scroll', handle);
+    };
+  }, [settings?.markAsReadOnScroll, articles, uiState.selectedFeedId, uiState.selectedFolderId, uiState.filterBy]);
 
   const loadArticles = async () => {
     setLoading(true);
@@ -169,9 +212,7 @@ export const ArticleList: React.FC = () => {
       await db.articles.update(article.id, { isRead: true, readAt: timestamp });
 
       setArticles(prev =>
-        prev
-          .map(a => (a.id === article.id ? { ...a, isRead: true, readAt: timestamp } : a))
-          .filter(a => (uiState.filterBy === 'unread' ? !a.isRead : true))
+        prev.map(a => (a.id === article.id ? { ...a, isRead: true, readAt: timestamp } : a))
       );
 
       const feed = feeds.find(f => f.id === article.feedId);
@@ -184,6 +225,52 @@ export const ArticleList: React.FC = () => {
       emitArticleUpdated(article.id, { isRead: true, readAt: timestamp }, { isRead: false });
       await updateUnreadBadge();
     }
+  };
+
+  const markArticleAsRead = async (article: Article) => {
+    if (!settings?.markAsReadOnScroll || article.isRead) return;
+
+    const timestamp = Date.now();
+    try {
+      await db.articles.update(article.id, { isRead: true, readAt: timestamp });
+
+      setArticles(prev =>
+        prev.map(a => (a.id === article.id ? { ...a, isRead: true, readAt: timestamp } : a))
+      );
+
+      const feed = feeds.find(f => f.id === article.feedId);
+      if (feed) {
+        const unreadCount = Math.max(0, feed.unreadCount - 1);
+        await db.feeds.update(feed.id, { unreadCount });
+        updateFeedLocal(feed.id, { unreadCount });
+      }
+
+
+      emitArticleUpdated(article.id, { isRead: true, readAt: timestamp }, { isRead: false }, 'scroll');
+      await updateUnreadBadge();
+    } catch (error) {
+      console.error('Failed to auto-mark read:', error);
+    }
+  };
+
+  const markArticleAsReadById = (id: string) => {
+    const article = articleMap.get(id);
+    if (!article || article.isRead) return;
+    if (markingRef.current.has(id)) return;
+    markingRef.current.add(id);
+    markArticleAsRead(article).finally(() => markingRef.current.delete(id));
+  };
+
+  const maybeAutoRead = () => {
+    if (!settings?.markAsReadOnScroll) return;
+    const threshold = headerRef.current?.getBoundingClientRect().bottom ?? 0;
+    itemRefs.current.forEach((node, id) => {
+      if (!node) return;
+      const top = node.getBoundingClientRect().top;
+      if (top <= threshold) {
+        markArticleAsReadById(id);
+      }
+    });
   };
 
   const handleBulkMark = async (isRead: boolean) => {
@@ -333,14 +420,15 @@ export const ArticleList: React.FC = () => {
     }
   };
 
-  const hasUnread = articles.some(article => !article.isRead);
+  const unreadCount = useMemo(() => articles.filter(a => !a.isRead).length, [articles]);
+  const hasUnread = unreadCount > 0;
   const hasRead = articles.some(article => article.isRead);
   const showBulkActions = !selectedArticle;
 
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center text-gray-500">
-        加载中...
+        {t('common.loading')}
       </div>
     );
   }
@@ -348,16 +436,19 @@ export const ArticleList: React.FC = () => {
   if (articles.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-gray-500">
-        未找到文章
+        {t('articleList.noArticles')}
       </div>
     );
   }
 
   return (
     <div className="h-full">
-      <div className="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2">
+      <div
+        ref={headerRef}
+        className="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2"
+      >
         <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-          文章 ({articles.length})
+          {t('articleList.articlesHeader', { count: unreadCount })}
         </h2>
 
         {showBulkActions ? (
@@ -369,7 +460,7 @@ export const ArticleList: React.FC = () => {
               disabled={bulkProcessing || !hasUnread}
               onClick={() => handleBulkMark(true)}
             >
-              标记全部已读
+              {t('articleList.markAllRead')}
             </Button>
             <Button
               variant="ghost"
@@ -378,7 +469,7 @@ export const ArticleList: React.FC = () => {
               disabled={bulkProcessing || !hasRead}
               onClick={() => handleBulkMark(false)}
             >
-              标记全部未读
+              {t('articleList.markAllUnread')}
             </Button>
           </div>
         ) : (
@@ -390,7 +481,7 @@ export const ArticleList: React.FC = () => {
               disabled={singleProcessing || !selectedArticle || selectedArticle.isRead}
               onClick={() => handleSingleMark(true)}
             >
-              标记已读
+              {t('articleList.markRead')}
             </Button>
             <Button
               variant="ghost"
@@ -399,7 +490,7 @@ export const ArticleList: React.FC = () => {
               disabled={singleProcessing || !selectedArticle || !selectedArticle.isRead}
               onClick={() => handleSingleMark(false)}
             >
-              标记未读
+              {t('articleList.markUnread')}
             </Button>
           </div>
         )}
@@ -408,6 +499,7 @@ export const ArticleList: React.FC = () => {
       <Virtuoso
         style={{ height: 'calc(100% - 57px)' }}
         data={articles}
+        components={{ Scroller: VirtuosoScroller }}
         itemContent={(_index, article) => (
           <ArticleItem
             key={article.id}
@@ -415,6 +507,13 @@ export const ArticleList: React.FC = () => {
             isSelected={uiState.selectedArticleId === article.id}
             onClick={() => handleArticleClick(article)}
             onToggleStar={() => handleToggleStar(article)}
+            onAutoRead={() => markArticleAsRead(article)}
+            registerRef={node => {
+              if (node) itemRefs.current.set(article.id, node);
+              else itemRefs.current.delete(article.id);
+            }}
+            enableAutoRead={!!settings?.markAsReadOnScroll}
+            getThreshold={() => headerRef.current?.getBoundingClientRect().bottom ?? 0}
           />
         )}
       />
@@ -427,9 +526,51 @@ interface ArticleItemProps {
   isSelected: boolean;
   onClick: () => void;
   onToggleStar: () => void;
+  onAutoRead: () => void;
+  registerRef: (node: HTMLDivElement | null) => void;
+  enableAutoRead: boolean;
+  getThreshold: () => number;
 }
 
-const ArticleItem: React.FC<ArticleItemProps> = ({ article, isSelected, onClick, onToggleStar }) => {
+const ArticleItem: React.FC<ArticleItemProps> = ({
+  article,
+  isSelected,
+  onClick,
+  onToggleStar,
+  onAutoRead,
+  enableAutoRead,
+  registerRef,
+  getThreshold,
+}) => {
+  const itemRef = useRef<HTMLDivElement | null>(null);
+  const hasMarkedRef = useRef(false);
+
+  useEffect(() => {
+    if (!enableAutoRead) return;
+    const node = itemRef.current;
+    if (!node) return;
+
+    hasMarkedRef.current = article.isRead;
+
+    const check = () => {
+      if (hasMarkedRef.current || article.isRead) return;
+      const top = node.getBoundingClientRect().top;
+      if (top <= getThreshold()) {
+        hasMarkedRef.current = true;
+        onAutoRead();
+      }
+    };
+
+    const observer = new IntersectionObserver(() => check(), {
+      root: null,
+      threshold: 0,
+    });
+    observer.observe(node);
+    check();
+
+    return () => observer.disconnect();
+  }, [article.isRead, enableAutoRead, onAutoRead, getThreshold]);
+
   const handleStarClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onToggleStar();
@@ -441,6 +582,10 @@ const ArticleItem: React.FC<ArticleItemProps> = ({ article, isSelected, onClick,
 
   return (
     <div
+      ref={node => {
+        itemRef.current = node;
+        registerRef(node);
+      }}
       onClick={onClick}
       className={cn(
         'p-3 border-b border-gray-200 dark:border-gray-800 cursor-pointer transition-colors',

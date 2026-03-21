@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Upload, Download, X, FileText, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import {
@@ -32,6 +33,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   onOpenChange,
   onCompleted,
 }) => {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -48,7 +50,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     const totalFeeds =
       result.rootFeeds.length + result.folders.reduce((s, f) => s + f.feeds.length, 0);
     if (totalFeeds === 0) {
-      throw new Error('未在 OPML 文件中找到有效的订阅源。');
+      throw new Error(t('importExport.noValidFeeds'));
     }
 
     let imported = 0;
@@ -136,7 +138,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       onCompleted?.();
       await updateUnreadBadge();
     } catch (error) {
-      const message = error instanceof Error ? error.message : '导入失败，请稍后重试。';
+      const message = error instanceof Error ? error.message : t('importExport.importFailed');
       setImportError(message);
     } finally {
       setImporting(false);
@@ -154,14 +156,14 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     try {
       const url = chrome.runtime.getURL('default-subscriptions.opml');
       const res = await fetch(url);
-      if (!res.ok) throw new Error('无法加载默认订阅配置');
+      if (!res.ok) throw new Error(t('importExport.loadDefaultFailed'));
       const text = await res.text();
       const stats = await runImport(text);
       setImportStats(stats);
       onCompleted?.();
       await updateUnreadBadge();
     } catch (error) {
-      const message = error instanceof Error ? error.message : '导入失败，请稍后重试。';
+      const message = error instanceof Error ? error.message : t('importExport.importFailed');
       setImportError(message);
     } finally {
       setImporting(false);
@@ -175,7 +177,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     try {
       const [feeds, folders] = await Promise.all([getAllFeeds(), getRootFolders()]);
       if (feeds.length === 0) {
-        throw new Error('当前没有可导出的订阅源。');
+        throw new Error(t('importExport.noFeedsToExport'));
       }
 
       const opml = generateOpml(feeds, folders);
@@ -190,7 +192,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '导出失败，请稍后重试。';
+      const message = error instanceof Error ? error.message : t('importExport.exportFailed');
       setExportError(message);
     } finally {
       setExporting(false);
@@ -204,7 +206,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         <Dialog.Content className="fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900">
           <div className="mb-6 flex items-center justify-between">
             <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              导入 / 导出订阅源
+              {t('importExport.title')}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">
@@ -214,7 +216,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
           </div>
 
           <Dialog.Description className="sr-only">
-            导入或导出 OPML 格式的订阅源文件
+            {t('importExport.description')}
           </Dialog.Description>
 
           <div className="space-y-6">
@@ -225,10 +227,10 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 </div>
                 <div className="flex-1">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    导入 OPML 文件
+                    {t('importExport.importTitle')}
                   </h3>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    选择本地的 OPML 文件，一次性导入多个订阅源。
+                    {t('importExport.importDesc')}
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <Button
@@ -237,7 +239,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                       onClick={handleImportClick}
                       disabled={importing}
                     >
-                      {importing ? '正在导入...' : '选择文件'}
+                      {importing ? t('importExport.importing') : t('importExport.selectFile')}
                     </Button>
                     <Button
                       type="button"
@@ -247,7 +249,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                       disabled={importing}
                     >
                       <Sparkles className="mr-2 h-4 w-4" />
-                      使用默认订阅配置
+                      {t('importExport.defaultImport')}
                     </Button>
                     <Input
                       ref={fileInputRef}
@@ -259,9 +261,9 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                   </div>
                   {importStats && (
                     <div className="mt-3 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                      <p>成功导入：{importStats.imported}</p>
-                      <p>已存在：{importStats.skipped}</p>
-                      <p>失败条目：{importStats.failed}</p>
+                      <p>{t('importExport.importedCount', { count: importStats.imported })}</p>
+                      <p>{t('importExport.skippedCount', { count: importStats.skipped })}</p>
+                      <p>{t('importExport.failedCount', { count: importStats.failed })}</p>
                     </div>
                   )}
                   {importError && (
@@ -278,10 +280,10 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 </div>
                 <div className="flex-1">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    导出当前订阅
+                    {t('importExport.exportTitle')}
                   </h3>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    将所有订阅源导出为 OPML 文件，方便备份或迁移到其他 RSS 阅读器。
+                    {t('importExport.exportDesc')}
                   </p>
                   <div className="mt-4 flex items-center gap-2">
                     <Button
@@ -292,7 +294,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                       disabled={exporting}
                     >
                       <FileText className="mr-2 h-4 w-4" />
-                      {exporting ? '正在导出...' : '导出 OPML'}
+                      {exporting ? t('importExport.exporting') : t('importExport.exportOpml')}
                     </Button>
                   </div>
                   {exportError && (

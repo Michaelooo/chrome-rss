@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus } from 'lucide-react';
+import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus, Pencil } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useAppStore } from '@/store';
@@ -16,12 +17,12 @@ import { subscribeArticleUpdated } from '@/lib/events/articles';
 import { AddFolderDialog } from '@/components/feed/AddFolderDialog';
 import { AddFeedDialog } from '@/components/feed/AddFeedDialog';
 import { FolderRenameDialog } from '@/components/feed/FolderRenameDialog';
-
-const STALE_THRESHOLD_MS = 365 * 24 * 60 * 60 * 1000;
+import { EditFeedDialog } from '@/components/feed/EditFeedDialog';
 
 type DragPayload = { type: 'feed'; id: string } | { type: 'folder'; id: string };
 
 export const Sidebar: React.FC = () => {
+  const { t } = useTranslation();
   const {
     feeds,
     folders,
@@ -42,10 +43,10 @@ export const Sidebar: React.FC = () => {
     null
   );
   const [starredCount, setStarredCount] = useState<number>(0);
-  const [inactiveFeedIds, setInactiveFeedIds] = useState<Set<string>>(new Set());
   const [showAddFolder, setShowAddFolder] = useState(false);
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [renameFolder, setRenameFolder] = useState<FolderType | null>(null);
+  const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const droppedRef = useRef(false);
 
   const rootFeeds = useMemo(
@@ -101,47 +102,13 @@ export const Sidebar: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const evaluateFeedActivity = async () => {
-      if (feeds.length === 0) {
-        if (!cancelled) setInactiveFeedIds(new Set());
-        return;
-      }
-      const cutoff = Date.now() - STALE_THRESHOLD_MS;
-      try {
-        const results = await Promise.all(
-          feeds.map(async feed => {
-            const latestArticle = await db.articles
-              .where('[feedId+pubDate]')
-              .between([feed.id, 0], [feed.id, Number.MAX_SAFE_INTEGER])
-              .last();
-            const latestActivity =
-              latestArticle?.pubDate ?? feed.lastFetchTime ?? feed.createdAt ?? 0;
-            return { feedId: feed.id, isInactive: latestActivity < cutoff };
-          })
-        );
-        if (!cancelled) {
-          setInactiveFeedIds(
-            new Set(results.filter(r => r.isInactive).map(r => r.feedId))
-          );
-        }
-      } catch (error) {
-        console.error('Failed to evaluate feed activity:', error);
-        if (!cancelled) setInactiveFeedIds(new Set());
-      }
-    };
-    evaluateFeedActivity();
-    return () => { cancelled = true; };
-  }, [feeds]);
-
   const totalUnread = useMemo(
     () => feeds.reduce((sum, feed) => sum + (feed.unreadCount || 0), 0),
     [feeds]
   );
 
   const isAllItemsSelected =
-    uiState.filterBy === 'all' && !uiState.selectedFeedId && !uiState.selectedFolderId;
+    uiState.filterBy === 'unread' && !uiState.selectedFeedId && !uiState.selectedFolderId;
   const isStarredSelected =
     uiState.filterBy === 'starred' && !uiState.selectedFeedId && !uiState.selectedFolderId;
 
@@ -150,7 +117,6 @@ export const Sidebar: React.FC = () => {
       selectedFeedId: feedId,
       selectedFolderId: undefined,
       selectedArticleId: undefined,
-      filterBy: 'all',
     });
   };
 
@@ -159,7 +125,6 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: folderId,
       selectedFeedId: undefined,
       selectedArticleId: undefined,
-      filterBy: 'all',
     });
   };
 
@@ -172,7 +137,7 @@ export const Sidebar: React.FC = () => {
       selectedFeedId: undefined,
       selectedFolderId: undefined,
       selectedArticleId: undefined,
-      filterBy: 'all',
+      filterBy: 'unread',
     });
   };
 
@@ -315,7 +280,7 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleDeleteFeed = async (feedId: string) => {
-    if (!confirm('确定要删除这个订阅源吗？删除后将无法恢复，相关的文章也会被删除。')) {
+    if (!confirm(t('sidebar.confirmDeleteFeed'))) {
       return;
     }
 
@@ -331,12 +296,12 @@ export const Sidebar: React.FC = () => {
       await recalcAllFeedUnreadCounts();
     } catch (error) {
       console.error('删除订阅源失败:', error);
-      alert('删除订阅源失败，请稍后重试');
+      alert(t('sidebar.deleteFeedFailed'));
     }
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    if (!confirm('确定要删除这个文件夹吗？其中的订阅源将移到未分类。')) return;
+    if (!confirm(t('sidebar.confirmDeleteFolder'))) return;
     try {
       await deleteFolder(folderId);
       if (uiState.selectedFolderId === folderId) {
@@ -349,7 +314,7 @@ export const Sidebar: React.FC = () => {
       await loadFolders();
     } catch (error) {
       console.error('删除文件夹失败:', error);
-      alert('删除文件夹失败，请稍后重试');
+      alert(t('sidebar.deleteFolderFailed'));
     }
   };
 
@@ -358,7 +323,12 @@ export const Sidebar: React.FC = () => {
       key={feed.id}
       items={[
         {
-          label: '删除订阅源',
+          label: t('sidebar.edit'),
+          icon: <Pencil className="w-4 h-4" />,
+          onClick: () => setEditingFeed(feed),
+        },
+        {
+          label: t('sidebar.deleteFeed'),
           icon: <Trash2 className="w-4 h-4" />,
           onClick: () => handleDeleteFeed(feed.id),
           variant: 'destructive',
@@ -389,14 +359,17 @@ export const Sidebar: React.FC = () => {
         )}
         <span className="flex-1 text-left truncate">{feed.title}</span>
         <div className="ml-auto flex items-center gap-2">
-          {inactiveFeedIds.has(feed.id) && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-              作者潜水中
-            </span>
-          )}
-          {feed.unreadCount > 0 && (
-            <span className="text-xs text-gray-500">{feed.unreadCount}</span>
-          )}
+          <span
+            className={cn(
+              'inline-flex min-w-[22px] justify-center  px-1.5 text-[11px] font-medium',
+              feed.unreadCount > 0
+                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+            )}
+          >
+            {feed.unreadCount}
+          </span>
+
         </div>
       </button>
     </ContextMenu>
@@ -413,12 +386,12 @@ export const Sidebar: React.FC = () => {
         <ContextMenu
           items={[
             {
-              label: '重命名',
+              label: t('sidebar.rename'),
               icon: <Folder className="w-4 h-4" />,
               onClick: () => setRenameFolder(folder),
             },
             {
-              label: '删除文件夹',
+              label: t('sidebar.deleteFolder'),
               icon: <Trash2 className="w-4 h-4" />,
               onClick: () => handleDeleteFolder(folder.id),
               variant: 'destructive',
@@ -490,20 +463,20 @@ export const Sidebar: React.FC = () => {
             : 'border-transparent'
       )}
     >
-      {rootFeeds.length > 0 && '未分类'}
+      {rootFeeds.length > 0 && t('sidebar.uncategorized')}
     </div>
   );
 
   return (
     <div className="h-full flex flex-col">
       <div className="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-        <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">订阅源</h2>
+        <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">{t('sidebar.feeds')}</h2>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setShowAddFeed(true)}
             className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-            title="添加新订阅源"
+            title={t('sidebar.addFeed')}
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -511,7 +484,7 @@ export const Sidebar: React.FC = () => {
             type="button"
             onClick={() => setShowAddFolder(true)}
             className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-            title="新增文件夹"
+            title={t('sidebar.addFolder')}
           >
             <FolderPlus className="w-4 h-4" />
           </button>
@@ -532,7 +505,7 @@ export const Sidebar: React.FC = () => {
               )}
             >
               <Rss className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1 text-left">我的未读</span>
+              <span className="flex-1 text-left">{t('sidebar.myUnread')}</span>
               <span className="text-xs text-gray-500">{totalUnread}</span>
             </button>
 
@@ -547,7 +520,7 @@ export const Sidebar: React.FC = () => {
               )}
             >
               <Star className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1 text-left">我的收藏</span>
+              <span className="flex-1 text-left">{t('sidebar.myStarred')}</span>
               <span className="text-xs text-gray-500">{starredCount}</span>
             </button>
           </div>
@@ -576,6 +549,15 @@ export const Sidebar: React.FC = () => {
           onOpenChange={open => !open && setRenameFolder(null)}
           folder={renameFolder}
           onRenamed={() => setRenameFolder(null)}
+        />
+        <EditFeedDialog
+          open={!!editingFeed}
+          onOpenChange={open => !open && setEditingFeed(null)}
+          feed={editingFeed}
+          onSaved={() => {
+            setEditingFeed(null);
+            loadFeeds();
+          }}
         />
     </div>
   );

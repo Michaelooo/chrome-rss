@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { RefreshCw, Settings, Search, Upload, HardDrive } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ImportExportDialog } from '@/components/feed/ImportExportDialog';
@@ -7,6 +8,7 @@ import { StorageManagementDialog } from '@/components/feed/StorageManagementDial
 import { useAppStore } from '@/store';
 
 export const Toolbar: React.FC = () => {
+  const { t } = useTranslation();
   const { uiState, setUIState, loadFeeds, loadFolders } = useAppStore();
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showStorageDialog, setShowStorageDialog] = useState(false);
@@ -28,7 +30,7 @@ export const Toolbar: React.FC = () => {
             variant="ghost"
             size="sm"
             onClick={handleRefresh}
-            title="刷新"
+            title={t('toolbar.refresh')}
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -38,7 +40,7 @@ export const Toolbar: React.FC = () => {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
-              placeholder="搜索文章"
+              placeholder={t('toolbar.searchPlaceholder')}
               value={uiState.searchQuery}
               onChange={(e) => setUIState({ searchQuery: e.target.value })}
               className="pl-10"
@@ -50,8 +52,35 @@ export const Toolbar: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setUIState({ filterBy: 'unread' })}
+            title={t('toolbar.showUnread')}
+            className={uiState.filterBy === 'unread' ? 'bg-gray-100 dark:bg-gray-800 text-blue-600 dark:text-blue-400' : ''}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+              <circle cx="18.5" cy="5.5" r="3" fill="currentColor" stroke="none"/>
+            </svg>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setUIState({ filterBy: 'all' })}
+            title={t('toolbar.showAll')}
+            className={uiState.filterBy === 'all' ? 'bg-gray-100 dark:bg-gray-800 text-blue-600 dark:text-blue-400' : ''}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setShowStorageDialog(true)}
-            title="存储空间管理"
+            title={t('toolbar.storageManagement')}
           >
             <HardDrive className="w-4 h-4" />
           </Button>
@@ -60,7 +89,7 @@ export const Toolbar: React.FC = () => {
             variant="ghost"
             size="sm"
             onClick={() => setShowImportDialog(true)}
-            title="导入/导出"
+            title={t('toolbar.importExport')}
           >
             <Upload className="w-4 h-4" />
           </Button>
@@ -69,7 +98,7 @@ export const Toolbar: React.FC = () => {
             variant="ghost"
             size="sm"
             onClick={() => chrome.runtime.openOptionsPage()}
-            title="设置"
+            title={t('toolbar.settings')}
           >
             <Settings className="w-4 h-4" />
           </Button>
