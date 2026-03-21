@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { ScrollArea } from '@/components/ui/ScrollArea';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useAppStore } from '@/store';
 import { cn } from '@/lib/utils';
@@ -20,6 +19,23 @@ import { FolderRenameDialog } from '@/components/feed/FolderRenameDialog';
 import { EditFeedDialog } from '@/components/feed/EditFeedDialog';
 
 type DragPayload = { type: 'feed'; id: string } | { type: 'folder'; id: string };
+
+function CountBadge({ count, tone = 'primary' }: { count: number; tone?: 'primary' | 'starred' }) {
+  if (count <= 0) return null;
+
+  return (
+    <span
+      className={cn(
+        'flex-shrink-0 inline-flex min-w-[22px] justify-center px-1.5 text-[11px] font-medium rounded',
+        tone === 'primary'
+          ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200'
+          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-200'
+      )}
+    >
+      {count}
+    </span>
+  );
+}
 
 export const Sidebar: React.FC = () => {
   const { t } = useTranslation();
@@ -343,7 +359,7 @@ export const Sidebar: React.FC = () => {
         onDrop={e => e.preventDefault()}
         onClick={() => handleFeedClick(feed.id)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+          'w-full max-w-full min-w-0 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
           indent && 'pl-8',
           'hover:bg-gray-100 dark:hover:bg-gray-800',
           uiState.selectedFeedId === feed.id
@@ -357,20 +373,8 @@ export const Sidebar: React.FC = () => {
         ) : (
           <Rss className="w-4 h-4 flex-shrink-0" />
         )}
-        <span className="flex-1 text-left truncate">{feed.title}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <span
-            className={cn(
-              'inline-flex min-w-[22px] justify-center  px-1.5 text-[11px] font-medium',
-              feed.unreadCount > 0
-                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200'
-                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-            )}
-          >
-            {feed.unreadCount}
-          </span>
-
-        </div>
+        <span className="min-w-0 flex-1 text-left truncate">{feed.title}</span>
+        <CountBadge count={feed.unreadCount ?? 0} />
       </button>
     </ContextMenu>
   );
@@ -382,7 +386,7 @@ export const Sidebar: React.FC = () => {
     const isDropTarget = dropTarget?.type === 'folder' && dropTarget.id === folder.id;
 
     return (
-      <div key={folder.id} className="space-y-0">
+      <div key={folder.id} className="w-full max-w-full overflow-hidden space-y-0">
         <ContextMenu
           items={[
             {
@@ -406,7 +410,7 @@ export const Sidebar: React.FC = () => {
             onDrop={e => handleDrop(e, { type: 'folder', id: folder.id })}
             onDragEnd={() => dragging?.type === 'folder' && setDragging(null)}
             className={cn(
-              'flex items-center gap-1 rounded-md text-sm transition-colors',
+              'flex w-full max-w-full min-w-0 overflow-hidden items-center gap-1 rounded-md text-sm transition-colors',
               'hover:bg-gray-100 dark:hover:bg-gray-800',
               isSelected && 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400',
               isDropTarget && 'ring-2 ring-primary-500/50',
@@ -430,18 +434,16 @@ export const Sidebar: React.FC = () => {
             <button
               type="button"
               onClick={() => handleFolderClick(folder.id)}
-              className="flex-1 flex items-center gap-2 px-2 py-2 text-left min-w-0"
+              className="flex-1 min-w-0 flex items-center gap-2 pl-1 pr-3 py-2 text-left"
             >
               <Folder className="w-4 h-4 flex-shrink-0 text-gray-500" />
-              <span className="flex-1 truncate">{folder.name}</span>
-              <span className="text-xs text-gray-500">
-                {folderFeeds.reduce((s, f) => s + (f.unreadCount || 0), 0)}
-              </span>
+              <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+              <CountBadge count={folderFeeds.reduce((s, f) => s + (f.unreadCount || 0), 0)} />
             </button>
           </div>
         </ContextMenu>
         {isExpanded && (
-          <div className="space-y-0">
+          <div className="w-full max-w-full overflow-hidden space-y-0">
             {folderFeeds.map(feed => renderFeedItem(feed, true))}
           </div>
         )}
@@ -468,7 +470,7 @@ export const Sidebar: React.FC = () => {
   );
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full w-full max-w-full min-w-0 overflow-hidden flex flex-col">
       <div className="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
         <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">{t('sidebar.feeds')}</h2>
         <div className="flex items-center gap-1">
@@ -491,13 +493,13 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-        <ScrollArea className="flex-1">
-        <div className="p-2 space-y-3">
-          <div className="rounded-lg bg-white/80 dark:bg-gray-800/80 p-1.5 space-y-0.5 shadow-sm">
+        <div className="w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:theme(colors.gray.300)_transparent] dark:[scrollbar-color:theme(colors.gray.700)_transparent]">
+        <div className="w-full overflow-x-hidden space-y-3 p-2">
+          <div className="w-full max-w-full rounded-lg bg-white/80 dark:bg-gray-800/80 p-1.5 space-y-0.5 shadow-sm">
             <button
               onClick={handleAllItemsClick}
               className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                'w-full max-w-full min-w-0 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
                 'hover:bg-gray-100 dark:hover:bg-gray-700',
                 isAllItemsSelected
                   ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
@@ -505,14 +507,14 @@ export const Sidebar: React.FC = () => {
               )}
             >
               <Rss className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1 text-left">{t('sidebar.myUnread')}</span>
-              <span className="text-xs text-gray-500">{totalUnread}</span>
+              <span className="min-w-0 flex-1 text-left truncate">{t('sidebar.myUnread')}</span>
+              <CountBadge count={totalUnread} />
             </button>
 
             <button
               onClick={handleStarredClick}
               className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                'w-full max-w-full min-w-0 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
                 'hover:bg-gray-100 dark:hover:bg-gray-700',
                 isStarredSelected
                   ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
@@ -520,19 +522,19 @@ export const Sidebar: React.FC = () => {
               )}
             >
               <Star className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1 text-left">{t('sidebar.myStarred')}</span>
-              <span className="text-xs text-gray-500">{starredCount}</span>
+              <span className="min-w-0 flex-1 text-left truncate">{t('sidebar.myStarred')}</span>
+              <CountBadge count={starredCount} tone="starred" />
             </button>
           </div>
 
-          <div className="space-y-1">
+          <div className="w-full max-w-full overflow-hidden space-y-1">
             {orderedFolders.map(folder => renderFolder(folder))}
 
             {rootDropZone}
             {rootFeeds.map(feed => renderFeedItem(feed))}
           </div>
         </div>
-        </ScrollArea>
+        </div>
 
         <AddFolderDialog
           open={showAddFolder}
