@@ -3,6 +3,7 @@ import { useAppStore } from '@/store';
 import { Sidebar } from './Sidebar';
 import { ArticleList } from './ArticleList';
 import { ArticleReader } from './ArticleReader';
+import { DigestView } from './DigestView';
 import { Toolbar } from './Toolbar';
 
 export const MainLayout: React.FC = () => {
@@ -28,16 +29,24 @@ export const MainLayout: React.FC = () => {
           <Sidebar />
         </div>
 
-        <div
-          className="border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0"
-          style={{ width: articleListWidth, minWidth: 320 }}
-        >
-          <ArticleList />
-        </div>
+        {uiState.specialView === 'digest' ? (
+          <div className="flex-1 bg-white dark:bg-gray-900">
+            <DigestView />
+          </div>
+        ) : (
+          <>
+            <div
+              className="border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0"
+              style={{ width: articleListWidth, minWidth: 320 }}
+            >
+              <ArticleList />
+            </div>
 
-        <div className="flex-1 bg-white dark:bg-gray-900">
-          <ArticleReader />
-        </div>
+            <div className="flex-1 bg-white dark:bg-gray-900">
+              <ArticleReader />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

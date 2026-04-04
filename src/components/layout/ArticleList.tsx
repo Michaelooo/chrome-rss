@@ -435,9 +435,12 @@ const ArticleItem: React.FC<ArticleItemProps> = ({ article, isSelected, onClick,
     onToggleStar();
   };
 
+  const hasSummary = !!article.summary?.text;
   const description = article.description || article.content || '';
   const plainText = stripHtml(description);
-  const excerpt = truncateText(plainText, 120);
+  const excerpt = hasSummary
+    ? article.summary!.text
+    : truncateText(plainText, 120);
 
   return (
     <div
@@ -463,6 +466,16 @@ const ArticleItem: React.FC<ArticleItemProps> = ({ article, isSelected, onClick,
           <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
             {excerpt}
           </p>
+
+          {article.summary?.tags && article.summary.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {article.summary.tags.map(tag => (
+                <span key={tag} className="inline-block rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-[11px] text-gray-600 dark:text-gray-400">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>{formatRelativeTime(article.pubDate)}</span>

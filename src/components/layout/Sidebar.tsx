@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus } from 'lucide-react';
+import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus, Newspaper } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useAppStore } from '@/store';
@@ -144,6 +144,7 @@ export const Sidebar: React.FC = () => {
     uiState.filterBy === 'all' && !uiState.selectedFeedId && !uiState.selectedFolderId;
   const isStarredSelected =
     uiState.filterBy === 'starred' && !uiState.selectedFeedId && !uiState.selectedFolderId;
+  const isDigestSelected = uiState.specialView === 'digest';
 
   const handleFeedClick = (feedId: string) => {
     setUIState({
@@ -151,6 +152,7 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: undefined,
       selectedArticleId: undefined,
       filterBy: 'all',
+      specialView: undefined,
     });
   };
 
@@ -160,6 +162,7 @@ export const Sidebar: React.FC = () => {
       selectedFeedId: undefined,
       selectedArticleId: undefined,
       filterBy: 'all',
+      specialView: undefined,
     });
   };
 
@@ -173,6 +176,7 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: undefined,
       selectedArticleId: undefined,
       filterBy: 'all',
+      specialView: undefined,
     });
   };
 
@@ -182,6 +186,17 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: undefined,
       selectedArticleId: undefined,
       filterBy: 'starred',
+      specialView: undefined,
+    });
+  };
+
+  const handleDigestClick = () => {
+    setUIState({
+      selectedFeedId: undefined,
+      selectedFolderId: undefined,
+      selectedArticleId: undefined,
+      filterBy: 'all' as any,
+      specialView: 'digest',
     });
   };
 
@@ -549,6 +564,20 @@ export const Sidebar: React.FC = () => {
               <Star className="w-4 h-4 flex-shrink-0" />
               <span className="flex-1 text-left">我的收藏</span>
               <span className="text-xs text-gray-500">{starredCount}</span>
+            </button>
+
+            <button
+              onClick={handleDigestClick}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
+                isDigestSelected
+                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                  : 'text-gray-700 dark:text-gray-300'
+              )}
+            >
+              <Newspaper className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1 text-left">今日简报</span>
             </button>
           </div>
 

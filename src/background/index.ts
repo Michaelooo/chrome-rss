@@ -1,7 +1,10 @@
 // Background service worker for Chrome extension
-import { db, getAllFeeds } from '../lib/storage/db';
+import { db, getAllFeeds, getSettings, addDigest } from '../lib/storage/db';
 import { feedFetcher } from '../lib/fetcher/feed-fetcher';
 import { updateUnreadBadge } from '../lib/chrome/badge';
+import { getAIConfig, chatCompletion } from '../lib/ai/client';
+import { buildSummarizePrompt, buildDigestPrompt, parseJSONResponse } from '../lib/ai/prompts';
+import type { ArticleSummary, DigestItem } from '@/types';
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -23,6 +26,12 @@ async function setupUpdateAlarm() {
     periodInMinutes: 15,
   });
 
+  // Set up daily digest alarm (every 24 hours)
+  await chrome.alarms.clear('dailyDigest');
+  await chrome.alarms.create('dailyDigest', {
+    periodInMinutes: 1440,
+  });
+
   console.log('Feed update alarm created');
 }
 
@@ -32,6 +41,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
   if (alarm.name === 'feedUpdate') {
     await updateAllFeeds();
+  }
+
+  if (alarm.name === 'dailyDigest') {
+    await generateDailyDigest();
   }
 });
 
@@ -72,6 +85,9 @@ async function updateAllFeeds(force = false) {
     console.log(`Feed update complete. Updated ${updatedCount} feeds, ${newArticlesCount} new articles`);
 
     await updateUnreadBadge();
+
+    // Auto-summarize new articles if AI is enabled
+    await autoSummarizeNewArticles();
 
     // Show notification if there are new articles
     if (newArticlesCount > 0) {
@@ -127,6 +143,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'TRANSLATE_ARTICLE') {
     handleTranslateArticle(message.payload)
       .then(result => sendResponse({ success: true, ...result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'SUMMARIZE_ARTICLE') {
+    handleSummarizeArticle(message.payload)
+      .then(result => sendResponse({ success: true, ...result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'GENERATE_DIGEST') {
+    generateDailyDigest()
+      .then(digest => sendResponse({ success: true, digest }))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
@@ -342,4 +372,133 @@ function joinChunksWithParagraphs(chunks: string[]): string {
 
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// === AI Summary Handler ===
+
+async function handleSummarizeArticle(payload: { articleId: string }) {
+  const config = await getAIConfig();
+  if (!config) {
+    throw new Error('AI is not configured. Please enable AI and set your API key in Settings.');
+  }
+
+  const article = await db.articles.get(payload.articleId);
+  if (!article) {
+    throw new Error('Article not found');
+  }
+
+  const rawContent = article.content || article.description || '';
+  const plainText = normalizeHtmlToText(rawContent);
+  if (!plainText) {
+    throw new Error('Article has no content to summarize');
+  }
+
+  const messages = buildSummarizePrompt(article.title, plainText);
+  const raw = await chatCompletion(config, messages);
+  const parsed = parseJSONResponse<{ summary: string; tags: string[] }>(raw);
+
+  const summary: ArticleSummary = {
+    text: parsed.summary,
+    tags: parsed.tags || [],
+    model: config.model,
+    generatedAt: Date.now(),
+  };
+
+  await db.articles.update(payload.articleId, { summary });
+  return { summary };
+}
+
+// === Auto-summarize after feed update ===
+
+async function autoSummarizeNewArticles() {
+  const settings = await getSettings();
+  if (!settings.enableAI || !settings.aiAutoSummarize || !settings.aiApiKey) {
+    return;
+  }
+
+  const cutoff = Date.now() - 15 * 60 * 1000; // last 15 min
+  const recentArticles = await db.articles
+    .orderBy('pubDate')
+    .reverse()
+    .limit(100)
+    .toArray();
+
+  const toSummarize = recentArticles.filter(
+    a => !a.isRead && !a.summary && a.pubDate >= cutoff
+  ).slice(0, 20); // max 20 per cycle
+
+  if (toSummarize.length === 0) return;
+
+  console.log(`Auto-summarizing ${toSummarize.length} articles`);
+
+  for (const article of toSummarize) {
+    try {
+      await handleSummarizeArticle({ articleId: article.id });
+      await delay(500);
+    } catch (error) {
+      console.error(`Failed to summarize article ${article.id}:`, error);
+    }
+  }
+}
+
+// === Daily Digest Handler ===
+
+async function generateDailyDigest() {
+  const config = await getAIConfig();
+  if (!config) {
+    throw new Error('AI is not configured');
+  }
+
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+
+  const articles = await db.articles
+    .where('pubDate')
+    .above(cutoff)
+    .toArray();
+
+  if (articles.length === 0) {
+    throw new Error('No articles in the last 24 hours');
+  }
+
+  // Build input with feed titles
+  const inputArticles = await Promise.all(
+    articles.slice(0, 50).map(async (article) => {
+      const feed = await db.feeds.get(article.feedId);
+      return {
+        title: article.title,
+        summary: article.summary?.text
+          || truncateText(normalizeHtmlToText(article.description || ''), 200),
+        feedTitle: feed?.title || 'Unknown',
+        feedId: article.feedId,
+        articleId: article.id,
+        link: article.link,
+      };
+    })
+  );
+
+  const messages = buildDigestPrompt(inputArticles);
+  const raw = await chatCompletion(config, messages);
+  const items = parseJSONResponse<DigestItem[]>(raw);
+
+  await addDigest({
+    date: today,
+    items,
+    model: config.model,
+    generatedAt: Date.now(),
+  });
+
+  const digest = await db.digests
+    .where('date')
+    .equals(today)
+    .reverse()
+    .sortBy('generatedAt')
+    .then(arr => arr[0]);
+
+  return digest;
+}
+
+function truncateText(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen) + '...';
 }

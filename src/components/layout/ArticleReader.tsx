@@ -38,6 +38,7 @@ const CONTENT_WIDTH_CLASS: Record<Settings['contentWidth'], string> = {
 import { formatRelativeTime } from '@/lib/utils';
 import { emitArticleUpdated, subscribeArticleUpdated } from '@/lib/events/articles';
 import { translateArticleWithGoogle } from '@/lib/translation';
+import { summarizeArticle } from '@/lib/ai';
 
 interface CodeBlockCleanupRecord {
   wrapper: HTMLDivElement;
@@ -212,6 +213,8 @@ export const ArticleReader: React.FC = () => {
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [showTranslation, setShowTranslation] = useState(false);
   const [detectedSourceLanguage, setDetectedSourceLanguage] = useState<string | undefined>();
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -224,6 +227,7 @@ export const ArticleReader: React.FC = () => {
     setTranslationError(null);
     setIsTranslating(false);
     setDetectedSourceLanguage(undefined);
+    setSummaryError(null);
   }, [uiState.selectedArticleId]);
 
   useEffect(() => {
@@ -249,6 +253,21 @@ export const ArticleReader: React.FC = () => {
       setTranslationError(null);
       setIsTranslating(false);
       setDetectedSourceLanguage(undefined);
+    }
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!article || isSummarizing) return;
+    setIsSummarizing(true);
+    setSummaryError(null);
+    try {
+      const summary = await summarizeArticle({ articleId: article.id });
+      setArticle({ ...article, summary });
+      emitArticleUpdated(article.id, { summary });
+    } catch (error) {
+      setSummaryError(error instanceof Error ? error.message : 'Failed to generate summary');
+    } finally {
+      setIsSummarizing(false);
     }
   };
 
@@ -684,6 +703,37 @@ export const ArticleReader: React.FC = () => {
           {translationError && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
               {translationError}
+            </div>
+          )}
+
+          {settings?.enableAI && (
+            <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">AI 摘要</h3>
+                {!article.summary && (
+                  <Button variant="ghost" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing}>
+                    {isSummarizing ? '生成中...' : '生成摘要'}
+                  </Button>
+                )}
+              </div>
+              {article.summary ? (
+                <>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{article.summary.text}</p>
+                  {article.summary.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {article.summary.tags.map(tag => (
+                        <span key={tag} className="rounded-full bg-primary-100 dark:bg-primary-900/30 px-2.5 py-0.5 text-xs font-medium text-primary-700 dark:text-primary-300">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : summaryError ? (
+                <p className="text-sm text-red-600 dark:text-red-400">{summaryError}</p>
+              ) : (
+                <p className="text-sm text-gray-500">点击"生成摘要"按钮获取 AI 摘要。</p>
+              )}
             </div>
           )}
 
