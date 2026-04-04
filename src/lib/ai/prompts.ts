@@ -46,19 +46,16 @@ export function buildDigestPrompt(articles: DigestInput[]): ChatMessage[] {
   return [
     {
       role: 'system',
-      content: `你是一个信息筛选助手。以下是是过去 24 小时内的 RSS 文章摘要。请从中筛选出 5-10 条最重要的信息，按重要度排序。
+      content: `你是一个信息筛选助手。以下是过去 24 小时内的 RSS 文章摘要。请从中筛选出 5-10 条最重要的信息，按重要度排序。
 
 对每条信息生成：
-- title: 核心要点标题
-不要重复原文标题
-30- summary: 1-2 句话的要点描述
+- title: 核心要点标题（不要重复原文标题）
+- summary: 1-2 句话的要点描述
 - feedTitle: 原始来源
 - feedId: 来源 ID
 - articleId: 原文 ID
 - link: 原文链接
-- importance: "high" | "medium" | "low"
-
-其中的一个)
+- importance: "high" | "medium" | "low"（high=重要, medium=推荐, low=一般）
 
 以纯 JSON 数组格式返回，不允许添加 markdown 代码围栏或其他文字：`,
     },
@@ -76,5 +73,47 @@ export function parseJSONResponse<T>(raw: string): T {
     .replace(/\n?``$/g, '')
     .trim();
 
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Response may be truncated (finish_reason=length). Try to repair.
+    return repairTruncatedJSON<T>(cleaned);
+  }
+}
+
+function repairTruncatedJSON<T>(raw: string): T {
+  // Attempt to find the last complete object in a JSON array
+  const lastComplete = raw.lastIndexOf('},');
+  if (lastComplete !== -1) {
+    const repaired = raw.slice(0, lastComplete + 1) + '\n]';
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      // fall through
+    }
+  }
+
+  // Attempt to close a truncated JSON object
+  let obj = raw;
+  // Count unclosed braces
+  let braces = 0, brackets = 0, inStr = false, escaped = false;
+  for (const ch of obj) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{') braces++;
+    if (ch === '}') braces--;
+    if (ch === '[') brackets++;
+    if (ch === ']') brackets--;
+  }
+  // If inside a string, close it
+  if (inStr) obj += '"';
+  // Remove trailing incomplete value (e.g. `"key": "partial`)
+  obj = obj.replace(/,\s*"[^"]*"\s*:\s*"[^"]*$/, '');
+  // Close open structures
+  for (let i = 0; i < braces; i++) obj += '}';
+  for (let i = 0; i < brackets; i++) obj += ']';
+
+  return JSON.parse(obj);
 }
