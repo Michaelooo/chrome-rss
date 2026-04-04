@@ -379,18 +379,18 @@ function delay(ms: number) {
 async function handleSummarizeArticle(payload: { articleId: string }) {
   const config = await getAIConfig();
   if (!config) {
-    throw new Error('AI is not configured. Please enable AI and set your API key in Settings.');
+    throw new Error('AI 未配置，请在设置中启用 AI 并填写 API Key');
   }
 
   const article = await db.articles.get(payload.articleId);
   if (!article) {
-    throw new Error('Article not found');
+    throw new Error('文章未找到');
   }
 
   const rawContent = article.content || article.description || '';
   const plainText = normalizeHtmlToText(rawContent);
   if (!plainText) {
-    throw new Error('Article has no content to summarize');
+    throw new Error('文章没有可摘要的内容');
   }
 
   const messages = buildSummarizePrompt(article.title, plainText);
@@ -446,7 +446,7 @@ async function autoSummarizeNewArticles() {
 async function generateDailyDigest() {
   const config = await getAIConfig();
   if (!config) {
-    throw new Error('AI is not configured');
+    throw new Error('AI 未配置，请在设置中启用 AI 并填写 API Key');
   }
 
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
@@ -458,7 +458,7 @@ async function generateDailyDigest() {
     .toArray();
 
   if (articles.length === 0) {
-    throw new Error('No articles in the last 24 hours');
+    throw new Error('过去 24 小时内没有文章，无法生成简报');
   }
 
   // Build input with feed titles

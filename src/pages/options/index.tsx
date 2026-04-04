@@ -287,7 +287,7 @@ const Options: React.FC = () => {
                     onChange={(e) =>
                       setSettings({ ...settings, aiApiEndpoint: e.target.value })
                     }
-                    placeholder="https://aigc.sankuai.com/v1/openai/native/"
+                    placeholder="https://api.openai.com/v1"
                   />
                 </div>
 

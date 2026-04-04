@@ -265,7 +265,7 @@ export const ArticleReader: React.FC = () => {
       setArticle({ ...article, summary });
       emitArticleUpdated(article.id, { summary });
     } catch (error) {
-      setSummaryError(error instanceof Error ? error.message : 'Failed to generate summary');
+      setSummaryError(error instanceof Error ? error.message : '生成摘要失败');
     } finally {
       setIsSummarizing(false);
     }

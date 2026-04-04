@@ -39,7 +39,7 @@ export const DigestView: React.FC = () => {
       const d = await generateDigest();
       setDigest(d);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate digest');
+      setError(err instanceof Error ? err.message : '生成简报失败');
     } finally {
       setGenerating(false);
     }

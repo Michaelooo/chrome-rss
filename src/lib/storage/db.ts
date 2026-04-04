@@ -84,7 +84,7 @@ const defaultSettings = {
   translationSourceLanguage: '',
   translationAutoFetch: false,
   enableAI: false,
-  aiApiEndpoint: 'https://aigc.sankuai.com/v1/openai/native/',
+  aiApiEndpoint: 'https://api.openai.com/v1',
   aiApiKey: '',
   aiModel: 'gpt-4o-2024-11-20',
   aiAutoSummarize: false,

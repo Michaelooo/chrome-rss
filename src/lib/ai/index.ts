@@ -4,27 +4,27 @@ import { db } from '@/lib/storage/db';
 
 export async function summarizeArticle(payload: { articleId: string }): Promise<ArticleSummary> {
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
-    throw new Error('AI summarization is unavailable in this environment.');
+    throw new Error('AI 摘要在当前环境下不可用');
   }
   const response = await chrome.runtime.sendMessage({
     type: 'SUMMARIZE_ARTICLE',
     payload,
   });
   if (!response || !response.success) {
-    throw new Error(response?.error || 'Failed to summarize article.');
+    throw new Error(response?.error || '生成摘要失败');
   }
   return response.summary as ArticleSummary;
 }
 
 export async function generateDigest(): Promise<Digest> {
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
-    throw new Error('Digest generation is unavailable in this environment.');
+    throw new Error('每日简报在当前环境下不可用');
   }
   const response = await chrome.runtime.sendMessage({
     type: 'GENERATE_DIGEST',
   });
   if (!response || !response.success) {
-    throw new Error(response?.error || 'Failed to generate digest.');
+    throw new Error(response?.error || '生成简报失败');
   }
   return response.digest as Digest;
 }

@@ -17,7 +17,7 @@ export async function getAIConfig(): Promise<AIConfig | null> {
     return null;
   }
   return {
-    endpoint: settings.aiApiEndpoint || 'https://aigc.sankuai.com/v1/openai/native/',
+    endpoint: settings.aiApiEndpoint || 'https://api.openai.com/v1',
     apiKey: settings.aiApiKey,
     model: settings.aiModel || 'gpt-4o-2024-11-20',
   };
@@ -39,17 +39,22 @@ export async function chatCompletion(
       model: config.model,
       messages,
       temperature: 0.3,
+      max_tokens: 4096,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`AI API request failed with status ${response.status}`);
+    throw new Error(`AI API 请求失败，状态码 ${response.status}`);
   }
 
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') {
-    throw new Error('AI API returned unexpected response format');
+    throw new Error('AI API 返回了意外的响应格式');
+  }
+  const finishReason = data?.choices?.[0]?.finish_reason;
+  if (finishReason === 'length') {
+    console.warn('AI response truncated (finish_reason=length). Consider increasing max_tokens or reducing input.');
   }
   return content;
 }
