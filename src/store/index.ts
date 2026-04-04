@@ -58,6 +58,7 @@ export const useAppStore = create<AppStore>((set) => ({
     searchQuery: '',
     sidebarWidth: 280,
     articleListWidth: 400,
+    specialView: undefined,
   },
 
   isLoadingFeeds: false,

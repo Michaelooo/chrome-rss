@@ -18,6 +18,13 @@ export interface Feed {
   updatedAt: number;
 }
 
+export interface ArticleSummary {
+  text: string;
+  tags: string[];
+  model: string;
+  generatedAt: number;
+}
+
 export interface Article {
   id: string;
   feedId: string;
@@ -33,7 +40,27 @@ export interface Article {
   readAt?: number;
   starredAt?: number;
   translations?: Record<string, ArticleTranslation>;
+  summary?: ArticleSummary;
   createdAt: number;
+}
+
+export interface Digest {
+  id: string;
+  date: string;
+  items: DigestItem[];
+  model: string;
+  generatedAt: number;
+  createdAt: number;
+}
+
+export interface DigestItem {
+  articleId: string;
+  title: string;
+  summary: string;
+  feedTitle: string;
+  feedId: string;
+  importance: 'high' | 'medium' | 'low';
+  link: string;
 }
 
 export interface ArticleTranslation {
@@ -90,6 +117,11 @@ export interface Settings {
   translationTargetLanguage: string;
   translationSourceLanguage?: string;
   translationAutoFetch: boolean;
+  enableAI: boolean;
+  aiApiEndpoint: string;
+  aiApiKey: string;
+  aiModel: string;
+  aiAutoSummarize: boolean;
 }
 
 // RSS Feed types
@@ -125,4 +157,5 @@ export interface UIState {
   searchQuery: string;
   sidebarWidth: number;
   articleListWidth: number;
+  specialView?: 'digest';
 }
