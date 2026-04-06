@@ -265,6 +265,50 @@ const Options: React.FC = () => {
                   <option value="xwide">{t('settings.contentWidthXWide')}</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {t('settings.articleTitleLines')}
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  {t('settings.articleTitleLinesDesc')}
+                </p>
+                <select
+                  value={settings.articleTitleLines ?? 1}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      articleTitleLines: parseInt(e.target.value) as 1 | 2 | 3,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
+                >
+                  <option value={1}>{t('settings.linesCount1')}</option>
+                  <option value={2}>{t('settings.linesCount2')}</option>
+                  <option value={3}>{t('settings.linesCount3')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {t('settings.articleExcerptLines')}
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  {t('settings.articleExcerptLinesDesc')}
+                </p>
+                <select
+                  value={settings.articleExcerptLines ?? 2}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      articleExcerptLines: parseInt(e.target.value) as 1 | 2 | 3,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
+                >
+                  <option value={1}>{t('settings.linesCount1')}</option>
+                  <option value={2}>{t('settings.linesCount2')}</option>
+                  <option value={3}>{t('settings.linesCount3')}</option>
+                </select>
+              </div>
             </div>
           </div>
 

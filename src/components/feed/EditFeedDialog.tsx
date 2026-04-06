@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
+import * as Switch from '@radix-ui/react-switch';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +24,7 @@ export const EditFeedDialog: React.FC<EditFeedDialogProps> = ({
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [fullContentFetch, setFullContentFetch] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,6 +32,7 @@ export const EditFeedDialog: React.FC<EditFeedDialogProps> = ({
     if (feed) {
       setName(feed.title);
       setUrl(feed.url);
+      setFullContentFetch(!!feed.fullContentFetch);
       setError('');
     }
   }, [feed, open]);
@@ -56,7 +59,7 @@ export const EditFeedDialog: React.FC<EditFeedDialogProps> = ({
     setLoading(true);
     setError('');
     try {
-      await updateFeed(feed.id, { title: trimmedName, url: trimmedUrl });
+      await updateFeed(feed.id, { title: trimmedName, url: trimmedUrl, fullContentFetch });
       onOpenChange(false);
       onSaved();
     } catch (err) {
@@ -120,6 +123,28 @@ export const EditFeedDialog: React.FC<EditFeedDialogProps> = ({
                 onChange={(e) => setUrl(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+              <Switch.Root
+                id="full-content-fetch"
+                checked={fullContentFetch}
+                onCheckedChange={setFullContentFetch}
+                className="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 data-[state=checked]:bg-primary-600 data-[state=unchecked]:bg-gray-200 dark:data-[state=unchecked]:bg-gray-600 mt-0.5"
+              >
+                <Switch.Thumb className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0" />
+              </Switch.Root>
+              <div className="flex-1">
+                <label
+                  htmlFor="full-content-fetch"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
+                >
+                  {t('editFeed.fullContentFetchLabel')}
+                </label>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {t('editFeed.fullContentFetchDesc')}
+                </p>
+              </div>
             </div>
 
             {error && (
