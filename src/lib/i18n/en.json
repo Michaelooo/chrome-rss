@@ -45,7 +45,14 @@
     "defaultArticleFilter": "Default article filter",
     "defaultArticleFilterAll": "Show all",
     "defaultArticleFilterUnread": "Show unread only",
-    "defaultArticleFilterDesc": "The default article filter mode when opening or refreshing the page."
+    "defaultArticleFilterDesc": "The default article filter mode when opening or refreshing the page.",
+    "articleTitleLines": "Title lines in list",
+    "articleTitleLinesDesc": "Maximum lines to display for each article title in the list.",
+    "articleExcerptLines": "Excerpt lines in list",
+    "articleExcerptLinesDesc": "Maximum lines to display for each article excerpt in the list.",
+    "linesCount1": "1 line",
+    "linesCount2": "2 lines",
+    "linesCount3": "3 lines"
   },
   "sidebar": {
     "feeds": "Feeds",
@@ -102,7 +109,12 @@
     "detectedLang": "Source: {{lang}}",
     "copy": "Copy",
     "copied": "Copied",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "fetchFullContent": "Full Content",
+    "fetchingFullContent": "Fetching...",
+    "fullContentFetched": "Full Content",
+    "fullContentError": "Fetch failed, please try again",
+    "refetchFullContent": "Refresh Full Content"
   },
   "addFeed": {
     "title": "Add new feed",
@@ -122,7 +134,9 @@
     "urlInvalid": "Invalid feed URL format",
     "saving": "Saving...",
     "save": "Save",
-    "saveFailed": "Failed to save, please try again later"
+    "saveFailed": "Failed to save, please try again later",
+    "fullContentFetchLabel": "Auto-fetch full article content",
+    "fullContentFetchDesc": "When opened, automatically fetch the full content from the original webpage (useful for feeds that only provide a summary)."
   },
   "addFolder": {
     "title": "New folder",

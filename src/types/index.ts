@@ -14,6 +14,7 @@ export interface Feed {
   lastFetchStatus: 'success' | 'error' | 'pending';
   lastFetchError?: string;
   unreadCount: number;
+  fullContentFetch?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -33,6 +34,7 @@ export interface Article {
   readAt?: number;
   starredAt?: number;
   translations?: Record<string, ArticleTranslation>;
+  fullContent?: string;
   createdAt: number;
 }
 
@@ -93,6 +95,8 @@ export interface Settings {
   translationTargetLanguage: string;
   translationSourceLanguage?: string;
   translationAutoFetch: boolean;
+  articleTitleLines: 1 | 2 | 3;
+  articleExcerptLines: 1 | 2 | 3;
 }
 
 // RSS Feed types

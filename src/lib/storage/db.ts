@@ -72,6 +72,17 @@ export class RSSDatabase extends Dexie {
             .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
         }
       });
+
+    this.version(7)
+      .stores({})
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
+        }
+      });
   }
 }
 
@@ -99,6 +110,8 @@ const defaultSettings = {
   translationTargetLanguage: 'zh-CN',
   translationSourceLanguage: '',
   translationAutoFetch: false,
+  articleTitleLines: 1 as const,
+  articleExcerptLines: 2 as const,
 };
 
 function mergeSettingsWithDefaults(partial: Partial<Settings>): Settings {

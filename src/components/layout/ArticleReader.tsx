@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, Star, Calendar, User, X, Type, Columns } from 'lucide-react';
+import { ExternalLink, Star, Calendar, User, X, Type, Columns, FileText } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/components/ui/ScrollArea';
@@ -8,6 +8,7 @@ import { useAppStore } from '@/store';
 import type { Settings } from '@/types';
 import { db } from '@/lib/storage/db';
 import type { Article } from '@/types';
+import { fetchFullContent } from '@/lib/fetcher/full-content-fetcher';
 
 const FONT_SIZE_OPTIONS: { value: Settings['fontSize']; tKey: string }[] = [
   { value: 'small', tKey: 'settings.fontSizeSmall' },
@@ -210,13 +211,15 @@ function buildHtmlFromTranslatedText(text: string): string {
 
 export const ArticleReader: React.FC = () => {
   const { t } = useTranslation();
-  const { uiState, settings, updateSettings } = useAppStore();
+  const { uiState, settings, feeds, updateSettings } = useAppStore();
   const [article, setArticle] = useState<Article | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt?: string } | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [showTranslation, setShowTranslation] = useState(false);
   const [detectedSourceLanguage, setDetectedSourceLanguage] = useState<string | undefined>();
+  const [isFetchingFullContent, setIsFetchingFullContent] = useState(false);
+  const [fullContentError, setFullContentError] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -229,6 +232,7 @@ export const ArticleReader: React.FC = () => {
     setTranslationError(null);
     setIsTranslating(false);
     setDetectedSourceLanguage(undefined);
+    setFullContentError(null);
   }, [uiState.selectedArticleId]);
 
   useEffect(() => {
@@ -281,6 +285,38 @@ export const ArticleReader: React.FC = () => {
       window.open(article.link, '_blank');
     }
   };
+
+  const handleFetchFullContent = async (force = false) => {
+    if (!article?.link) return;
+    if (isFetchingFullContent) return;
+    if (article.fullContent && !force) return;
+
+    setIsFetchingFullContent(true);
+    setFullContentError(null);
+    try {
+      const html = await fetchFullContent(article.link);
+      await db.articles.update(article.id, { fullContent: html });
+      const updated = { ...article, fullContent: html };
+      setArticle(updated);
+      emitArticleUpdated(article.id, { fullContent: html });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('articleReader.fullContentError');
+      setFullContentError(message);
+    } finally {
+      setIsFetchingFullContent(false);
+    }
+  };
+
+  // Auto-fetch full content when the feed has fullContentFetch enabled
+  // and the article doesn't have full content yet
+  useEffect(() => {
+    if (!article) return;
+    if (article.fullContent) return;
+    const feed = feeds.find(f => f.id === article.feedId);
+    if (!feed?.fullContentFetch) return;
+    void handleFetchFullContent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article?.id, feeds]);
 
   useEffect(() => {
     if (!article) return;
@@ -496,7 +532,7 @@ export const ArticleReader: React.FC = () => {
     if (showTranslation && activeTranslation) {
       return activeTranslation.contentHtml;
     }
-    return article?.content || article?.description || '';
+    return article?.fullContent || article?.content || article?.description || '';
   }, [showTranslation, activeTranslation, article]);
 
   const translationInfo = useMemo(() => {
@@ -581,6 +617,28 @@ export const ArticleReader: React.FC = () => {
                     : isTranslating
                       ? t('articleReader.translating')
                       : t('articleReader.translate')}
+                </Button>
+              )}
+
+              {article.link && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void handleFetchFullContent(!!article.fullContent)}
+                  disabled={isFetchingFullContent}
+                  title={
+                    article.fullContent
+                      ? t('articleReader.refetchFullContent')
+                      : t('articleReader.fetchFullContent')
+                  }
+                  className="gap-1"
+                >
+                  <FileText className="h-4 w-4" />
+                  {isFetchingFullContent
+                    ? t('articleReader.fetchingFullContent')
+                    : article.fullContent
+                      ? t('articleReader.fullContentFetched')
+                      : t('articleReader.fetchFullContent')}
                 </Button>
               )}
 
@@ -693,6 +751,12 @@ export const ArticleReader: React.FC = () => {
           {translationError && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
               {translationError}
+            </div>
+          )}
+
+          {fullContentError && (
+            <div className="mb-4 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700 dark:border-orange-900/60 dark:bg-orange-900/20 dark:text-orange-300">
+              {t('articleReader.fullContentError')}: {fullContentError}
             </div>
           )}
 

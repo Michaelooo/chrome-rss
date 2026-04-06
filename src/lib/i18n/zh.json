@@ -45,7 +45,14 @@
     "defaultArticleFilter": "默认文章显示方式",
     "defaultArticleFilterAll": "显示全部",
     "defaultArticleFilterUnread": "仅显示未读",
-    "defaultArticleFilterDesc": "进入或刷新页面时，默认的文章筛选模式。"
+    "defaultArticleFilterDesc": "进入或刷新页面时，默认的文章筛选模式。",
+    "articleTitleLines": "列表标题显示行数",
+    "articleTitleLinesDesc": "文章列表中每条标题最多显示的行数。",
+    "articleExcerptLines": "列表正文显示行数",
+    "articleExcerptLinesDesc": "文章列表中每条摘要最多显示的行数。",
+    "linesCount1": "1 行",
+    "linesCount2": "2 行",
+    "linesCount3": "3 行"
   },
   "sidebar": {
     "feeds": "订阅源",
@@ -102,7 +109,12 @@
     "detectedLang": "原文语言：{{lang}}",
     "copy": "复制",
     "copied": "已复制",
-    "copyFailed": "复制失败"
+    "copyFailed": "复制失败",
+    "fetchFullContent": "获取全文",
+    "fetchingFullContent": "获取中...",
+    "fullContentFetched": "已获取全文",
+    "fullContentError": "获取失败，请重试",
+    "refetchFullContent": "重新获取全文"
   },
   "addFeed": {
     "title": "添加新订阅源",
@@ -122,7 +134,9 @@
     "urlInvalid": "订阅源地址格式不正确",
     "saving": "保存中...",
     "save": "保存",
-    "saveFailed": "保存失败，请稍后重试"
+    "saveFailed": "保存失败，请稍后重试",
+    "fullContentFetchLabel": "自动获取文章全文",
+    "fullContentFetchDesc": "打开文章时，自动从原始网页获取完整内容（适合只提供摘要的订阅源）。"
   },
   "addFolder": {
     "title": "新建文件夹",
