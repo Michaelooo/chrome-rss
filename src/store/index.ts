@@ -9,7 +9,7 @@ import {
   updateFolder as updateFolderDb,
   deleteFolder as deleteFolderDb,
   moveFeedToFolder as moveFeedToFolderDb,
-  recalcAllFeedUnreadCounts,
+  db,
 } from '@/lib/storage/db';
 
 interface AppStore {
@@ -41,6 +41,42 @@ interface AppStore {
   moveFeedToFolder: (feedId: string, folderId?: string) => Promise<void>;
 }
 
+const LAYOUT_STORAGE_KEY = 'rss-layout-widths';
+
+function loadLayoutWidths(): { sidebarWidth: number; articleListWidth: number } {
+  try {
+    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return { sidebarWidth: 280, articleListWidth: 400 };
+}
+
+function saveLayoutWidths(sidebarWidth: number, articleListWidth: number) {
+  try {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ sidebarWidth, articleListWidth }));
+  } catch {
+    // ignore
+  }
+}
+
+async function getFeedsWithUnreadCounts(feeds: Feed[]): Promise<Feed[]> {
+  const allArticles = await db.articles.toArray();
+  const unreadMap = new Map<string, number>();
+
+  for (const article of allArticles) {
+    if (!article.isRead) {
+      unreadMap.set(article.feedId, (unreadMap.get(article.feedId) ?? 0) + 1);
+    }
+  }
+
+  return feeds.map(feed => ({
+    ...feed,
+    unreadCount: unreadMap.get(feed.id) ?? 0,
+  }));
+}
+
 export const useAppStore = create<AppStore>((set) => ({
   // Initial state
   feeds: [],
@@ -54,10 +90,9 @@ export const useAppStore = create<AppStore>((set) => ({
     selectedArticleId: undefined,
     viewMode: 'list',
     sortBy: 'date-desc',
-    filterBy: 'all',
+    filterBy: 'unread',
     searchQuery: '',
-    sidebarWidth: 280,
-    articleListWidth: 400,
+    ...loadLayoutWidths(),
   },
 
   isLoadingFeeds: false,
@@ -68,11 +103,12 @@ export const useAppStore = create<AppStore>((set) => ({
     set({ isLoadingFeeds: true });
     try {
       const feeds = await getAllFeeds();
-      const sorted = [...feeds].sort((a, b) => {
-        const aOrder = a.sortOrder ?? a.createdAt;
-        const bOrder = b.sortOrder ?? b.createdAt;
-        return aOrder - bOrder;
-      });
+      const sorted = (await getFeedsWithUnreadCounts(feeds))
+        .sort((a, b) => {
+          const aOrder = a.sortOrder ?? a.createdAt;
+          const bOrder = b.sortOrder ?? b.createdAt;
+          return aOrder - bOrder;
+        });
       set({ feeds: sorted });
     } catch (error) {
       console.error('Failed to load feeds:', error);
@@ -93,16 +129,26 @@ export const useAppStore = create<AppStore>((set) => ({
   loadSettings: async () => {
     try {
       const settings = await getSettings();
-      set({ settings });
+      set((state) => ({
+        settings,
+        uiState: {
+          ...state.uiState,
+          filterBy: settings.defaultArticleFilter ?? 'all',
+        },
+      }));
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
   },
 
   setUIState: (updates) => {
-    set((state) => ({
-      uiState: { ...state.uiState, ...updates },
-    }));
+    set((state) => {
+      const next = { ...state.uiState, ...updates };
+      if (updates.sidebarWidth !== undefined || updates.articleListWidth !== undefined) {
+        saveLayoutWidths(next.sidebarWidth, next.articleListWidth);
+      }
+      return { uiState: next };
+    });
   },
 
   updateSettings: async (updates) => {
@@ -126,12 +172,24 @@ export const useAppStore = create<AppStore>((set) => ({
   },
 
   replaceFeeds: (feeds) => {
-    const sorted = [...feeds].sort((a, b) => {
-      const aOrder = a.sortOrder ?? a.createdAt;
-      const bOrder = b.sortOrder ?? b.createdAt;
-      return aOrder - bOrder;
-    });
-    set({ feeds: sorted });
+    getFeedsWithUnreadCounts(feeds)
+      .then((hydratedFeeds) => {
+        const sorted = [...hydratedFeeds].sort((a, b) => {
+          const aOrder = a.sortOrder ?? a.createdAt;
+          const bOrder = b.sortOrder ?? b.createdAt;
+          return aOrder - bOrder;
+        });
+        set({ feeds: sorted });
+      })
+      .catch((error) => {
+        console.error('Failed to replace feeds:', error);
+        const sorted = [...feeds].sort((a, b) => {
+          const aOrder = a.sortOrder ?? a.createdAt;
+          const bOrder = b.sortOrder ?? b.createdAt;
+          return aOrder - bOrder;
+        });
+        set({ feeds: sorted });
+      });
   },
 
   replaceFolders: (folders) => {
@@ -155,13 +213,12 @@ export const useAppStore = create<AppStore>((set) => ({
     await deleteFolderDb(id);
     const folders = await getRootFolders();
     set({ folders });
-    await recalcAllFeedUnreadCounts();
   },
 
   moveFeedToFolder: async (feedId, folderId) => {
     await moveFeedToFolderDb(feedId, folderId);
     const feeds = await getAllFeeds();
-    const sorted = [...feeds].sort((a, b) => {
+    const sorted = (await getFeedsWithUnreadCounts(feeds)).sort((a, b) => {
       const aOrder = a.sortOrder ?? a.createdAt;
       const bOrder = b.sortOrder ?? b.createdAt;
       return aOrder - bOrder;
