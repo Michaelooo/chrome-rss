@@ -3,6 +3,7 @@ import { useAppStore } from '@/store';
 import { Sidebar } from './Sidebar';
 import { ArticleList } from './ArticleList';
 import { ArticleReader } from './ArticleReader';
+import { DigestView } from './DigestView';
 import { Toolbar } from './Toolbar';
 import i18n, { setStoredLanguage } from '@/lib/i18n';
 
@@ -41,6 +42,25 @@ export const MainLayout: React.FC = () => {
       setStoredLanguage(settings.language);
     }
   }, [settings?.language]);
+
+  // Apply theme from settings
+  useEffect(() => {
+    if (!settings?.theme) return;
+    const isDark = settings.theme === 'dark' ||
+      (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [settings?.theme]);
+
+  // Listen for system theme changes when in 'auto' mode
+  useEffect(() => {
+    if (settings?.theme !== 'auto') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      document.documentElement.classList.toggle('dark', e.matches);
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [settings?.theme]);
 
   const articleListWidth = Math.max(ARTICLE_LIST_MIN, uiState.articleListWidth || 0);
   const sidebarWidth = Math.max(SIDEBAR_MIN, uiState.sidebarWidth || 0);
@@ -93,9 +113,15 @@ export const MainLayout: React.FC = () => {
           <Sidebar />
         </div>
 
-        {/* Sidebar resize handle */}
+        {uiState.specialView === 'digest' ? (
+          <div className="flex-1 bg-white dark:bg-gray-900">
+            <DigestView />
+          </div>
+        ) : (
+          <>
+            {/* Sidebar resize handle */}
         <div
-          className="flex-shrink-0 cursor-col-resize bg-gray-200 dark:bg-gray-800 hover:bg-blue-400 dark:hover:bg-blue-600 active:bg-blue-500 transition-colors"
+              className="flex-shrink-0 cursor-col-resize bg-gray-200 dark:bg-gray-800 hover:bg-blue-400 dark:hover:bg-blue-600 active:bg-blue-500 transition-colors"
           style={{ width: 2 }}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -105,10 +131,10 @@ export const MainLayout: React.FC = () => {
 
         <div
           className="bg-white dark:bg-gray-900 flex-shrink-0"
-          style={{ width: articleListWidth }}
-        >
-          <ArticleList />
-        </div>
+              style={{ width: articleListWidth }}
+            >
+              <ArticleList />
+            </div>
 
         {/* ArticleList resize handle */}
         <div
@@ -120,9 +146,11 @@ export const MainLayout: React.FC = () => {
           }}
         />
 
-        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0">
-          <ArticleReader />
-        </div>
+            <div className="flex-1 bg-white dark:bg-gray-900 min-w-0">
+              <ArticleReader />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

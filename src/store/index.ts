@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Feed, Article, Folder, Settings, UIState } from '@/types';
+import type { Feed, Article, Folder, Settings, UIState, FeedFilter } from '@/types';
 import {
   getAllFeeds,
   getRootFolders,
@@ -9,6 +9,10 @@ import {
   updateFolder as updateFolderDb,
   deleteFolder as deleteFolderDb,
   moveFeedToFolder as moveFeedToFolderDb,
+  getFilters,
+  addFilter as addFilterDb,
+  updateFilter as updateFilterDb,
+  deleteFilter as deleteFilterDb,
   db,
 } from '@/lib/storage/db';
 
@@ -18,6 +22,7 @@ interface AppStore {
   folders: Folder[];
   articles: Article[];
   settings: Settings | null;
+  filters: FeedFilter[];
 
   // UI State
   uiState: UIState;
@@ -30,6 +35,7 @@ interface AppStore {
   loadFeeds: () => Promise<void>;
   loadFolders: () => Promise<void>;
   loadSettings: () => Promise<void>;
+  loadFilters: () => Promise<void>;
   setUIState: (updates: Partial<UIState>) => void;
   updateSettings: (updates: Partial<Settings>) => Promise<void>;
   updateFeedLocal: (feedId: string, updates: Partial<Feed>) => void;
@@ -39,6 +45,9 @@ interface AppStore {
   updateFolder: (id: string, updates: Partial<Folder>) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
   moveFeedToFolder: (feedId: string, folderId?: string) => Promise<void>;
+  addFilter: (filter: Omit<FeedFilter, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateFilter: (id: string, updates: Partial<FeedFilter>) => Promise<void>;
+  removeFilter: (id: string) => Promise<void>;
 }
 
 const LAYOUT_STORAGE_KEY = 'rss-layout-widths';
@@ -83,6 +92,7 @@ export const useAppStore = create<AppStore>((set) => ({
   folders: [],
   articles: [],
   settings: null,
+  filters: [],
 
   uiState: {
     selectedFeedId: undefined,
@@ -92,6 +102,7 @@ export const useAppStore = create<AppStore>((set) => ({
     sortBy: 'date-desc',
     filterBy: 'unread',
     searchQuery: '',
+    specialView: undefined,
     ...loadLayoutWidths(),
   },
 
@@ -224,5 +235,33 @@ export const useAppStore = create<AppStore>((set) => ({
       return aOrder - bOrder;
     });
     set({ feeds: sorted });
+  },
+
+  loadFilters: async () => {
+    try {
+      const filters = await getFilters();
+      set({ filters });
+    } catch (error) {
+      console.error('Failed to load filters:', error);
+    }
+  },
+
+  addFilter: async (filter) => {
+    const id = await addFilterDb(filter);
+    const filters = await getFilters();
+    set({ filters });
+    return id;
+  },
+
+  updateFilter: async (id, updates) => {
+    await updateFilterDb(id, updates);
+    const filters = await getFilters();
+    set({ filters });
+  },
+
+  removeFilter: async (id) => {
+    await deleteFilterDb(id);
+    const filters = await getFilters();
+    set({ filters });
   },
 }));

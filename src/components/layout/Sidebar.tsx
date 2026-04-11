@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus, Pencil } from 'lucide-react';
+import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus, Newspaper, Pencil, Filter, Mail } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useAppStore } from '@/store';
@@ -17,6 +17,7 @@ import { AddFolderDialog } from '@/components/feed/AddFolderDialog';
 import { AddFeedDialog } from '@/components/feed/AddFeedDialog';
 import { FolderRenameDialog } from '@/components/feed/FolderRenameDialog';
 import { EditFeedDialog } from '@/components/feed/EditFeedDialog';
+import { FilterList } from '@/components/filter/FilterList';
 
 type DragPayload = { type: 'feed'; id: string } | { type: 'folder'; id: string };
 
@@ -42,13 +43,18 @@ export const Sidebar: React.FC = () => {
   const {
     feeds,
     folders,
+    filters,
     uiState,
     setUIState,
     loadFeeds,
     loadFolders,
+    loadFilters,
     updateFolder,
     deleteFolder,
     moveFeedToFolder,
+    addFilter,
+    updateFilter,
+    removeFilter,
   } = useAppStore();
   const [orderedFolders, setOrderedFolders] = useState<FolderType[]>(folders);
   const [orderedFeedsByFolder, setOrderedFeedsByFolder] = useState<Map<string | 'root', Feed[]>>(
@@ -63,6 +69,7 @@ export const Sidebar: React.FC = () => {
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [renameFolder, setRenameFolder] = useState<FolderType | null>(null);
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const droppedRef = useRef(false);
 
   const rootFeeds = useMemo(
@@ -124,15 +131,20 @@ export const Sidebar: React.FC = () => {
   );
 
   const isAllItemsSelected =
+    uiState.filterBy === 'all' && !uiState.selectedFeedId && !uiState.selectedFolderId;
+
+  const isUnreadSelected =
     uiState.filterBy === 'unread' && !uiState.selectedFeedId && !uiState.selectedFolderId;
   const isStarredSelected =
     uiState.filterBy === 'starred' && !uiState.selectedFeedId && !uiState.selectedFolderId;
+  const isDigestSelected = uiState.specialView === 'digest';
 
   const handleFeedClick = (feedId: string) => {
     setUIState({
       selectedFeedId: feedId,
       selectedFolderId: undefined,
       selectedArticleId: undefined,
+      specialView: undefined,
     });
   };
 
@@ -141,6 +153,7 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: folderId,
       selectedFeedId: undefined,
       selectedArticleId: undefined,
+      specialView: undefined,
     });
   };
 
@@ -153,7 +166,18 @@ export const Sidebar: React.FC = () => {
       selectedFeedId: undefined,
       selectedFolderId: undefined,
       selectedArticleId: undefined,
+      filterBy: 'all',
+      specialView: undefined,
+    });
+  };
+
+  const handleUnreadClick = () => {
+    setUIState({
+      selectedFeedId: undefined,
+      selectedFolderId: undefined,
+      selectedArticleId: undefined,
       filterBy: 'unread',
+      specialView: undefined,
     });
   };
 
@@ -163,6 +187,17 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: undefined,
       selectedArticleId: undefined,
       filterBy: 'starred',
+      specialView: undefined,
+    });
+  };
+
+  const handleDigestClick = () => {
+    setUIState({
+      selectedFeedId: undefined,
+      selectedFolderId: undefined,
+      selectedArticleId: undefined,
+      filterBy: 'all' as any,
+      specialView: 'digest',
     });
   };
 
@@ -476,6 +511,17 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => {
+              loadFilters();
+              setShowFilters(true);
+            }}
+            className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+            title="过滤规则"
+          >
+            <Filter className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
             onClick={() => setShowAddFeed(true)}
             className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
             title={t('sidebar.addFeed')}
@@ -507,6 +553,20 @@ export const Sidebar: React.FC = () => {
               )}
             >
               <Rss className="w-4 h-4 flex-shrink-0" />
+              <span className="min-w-0 flex-1 text-left truncate">全部文章</span>
+            </button>
+
+            <button
+              onClick={handleUnreadClick}
+              className={cn(
+                'w-full max-w-full min-w-0 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
+                isUnreadSelected
+                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                  : 'text-gray-700 dark:text-gray-300'
+              )}
+            >
+              <Mail className="w-4 h-4 flex-shrink-0" />
               <span className="min-w-0 flex-1 text-left truncate">{t('sidebar.myUnread')}</span>
               <CountBadge count={totalUnread} />
             </button>
@@ -524,6 +584,20 @@ export const Sidebar: React.FC = () => {
               <Star className="w-4 h-4 flex-shrink-0" />
               <span className="min-w-0 flex-1 text-left truncate">{t('sidebar.myStarred')}</span>
               <CountBadge count={starredCount} tone="starred" />
+            </button>
+
+            <button
+              onClick={handleDigestClick}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
+                isDigestSelected
+                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                  : 'text-gray-700 dark:text-gray-300'
+              )}
+            >
+              <Newspaper className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1 text-left">今日简报</span>
             </button>
           </div>
 
@@ -561,6 +635,31 @@ export const Sidebar: React.FC = () => {
             loadFeeds();
           }}
         />
+
+        {/* Filter Rules Dialog */}
+        {showFilters && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+            <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">过滤规则</h2>
+                <button
+                  onClick={() => setShowFilters(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  ✕
+                </button>
+              </div>
+              <FilterList
+                filters={filters}
+                feedOptions={feeds.map(f => ({ id: f.id, title: f.title }))}
+                onAdd={addFilter}
+                onUpdate={updateFilter}
+                onDelete={removeFilter}
+                onToggle={(id, enabled) => updateFilter(id, { enabled })}
+              />
+            </div>
+          </div>
+        )}
     </div>
   );
 };

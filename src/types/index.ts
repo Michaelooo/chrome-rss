@@ -19,6 +19,13 @@ export interface Feed {
   updatedAt: number;
 }
 
+export interface ArticleSummary {
+  text: string;
+  tags: string[];
+  model: string;
+  generatedAt: number;
+}
+
 export interface Article {
   id: string;
   feedId: string;
@@ -34,8 +41,29 @@ export interface Article {
   readAt?: number;
   starredAt?: number;
   translations?: Record<string, ArticleTranslation>;
+  summary?: ArticleSummary;
+  createdAt: number;
+  fullContent?: string;
+}
+
+export interface Digest {
+  id: string;
+  date: string;
+  items: DigestItem[];
+  model: string;
+  generatedAt: number;
   fullContent?: string;
   createdAt: number;
+}
+
+export interface DigestItem {
+  articleId: string;
+  title: string;
+  summary: string;
+  feedTitle: string;
+  feedId: string;
+  importance: 'high' | 'medium' | 'low';
+  link: string;
 }
 
 export interface ArticleTranslation {
@@ -59,18 +87,24 @@ export interface FeedFilter {
   feedId?: string; // if undefined, applies globally
   name: string;
   enabled: boolean;
-  filterType: 'include' | 'exclude';
-  matchType: 'title' | 'content' | 'author' | 'all';
-  pattern: string;
-  isRegex: boolean;
+  conditionOperator: 'AND' | 'OR';
+  conditions: FilterCondition[];
   actions: FilterAction[];
   createdAt: number;
   updatedAt: number;
 }
 
+export interface FilterCondition {
+  id: string;
+  field: 'title' | 'content' | 'author' | 'url';
+  operator: 'contains' | 'not_contains' | 'equals' | 'matches';
+  value: string;
+  isRegex: boolean;
+}
+
 export interface FilterAction {
-  type: 'mark-read' | 'mark-starred' | 'delete' | 'move-to-folder';
-  value?: string; // for move-to-folder, the folder id
+  type: 'mark-read' | 'star' | 'delete' | 'add-tag';
+  value?: string; // for add-tag, the tag name
 }
 
 export interface Settings {
@@ -95,6 +129,11 @@ export interface Settings {
   translationTargetLanguage: string;
   translationSourceLanguage?: string;
   translationAutoFetch: boolean;
+  enableAI: boolean;
+  aiApiEndpoint: string;
+  aiApiKey: string;
+  aiModel: string;
+  aiAutoSummarize: boolean;
   articleTitleLines: 1 | 2 | 3;
   articleExcerptLines: 1 | 2 | 3;
 }
@@ -132,4 +171,5 @@ export interface UIState {
   searchQuery: string;
   sidebarWidth: number;
   articleListWidth: number;
+  specialView?: 'digest';
 }
