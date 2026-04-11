@@ -10,8 +10,8 @@ export function buildSummarizePrompt(title: string, content: string): ChatMessag
   return [
     {
       role: 'system',
-      content: `你是一个信息提取助手。请对以下文章生成：
-1. 一段 2-3 句话的核心摘要（只保留最有价值的信息，去掉废话）
+      content: `你是一个信息提取助手。无论文章是什么语言，输出必须全部使用中文。请对以下文章生成：
+1. 一段 4-6 句话的核心摘要，包含：文章的核心观点、关键数据或事实、结论或影响
 2. 3-5 个关键词标签
 
 以纯 JSON 格式返回，不允许添加 markdown 代码围栏或其他文字：
