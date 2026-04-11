@@ -78,9 +78,14 @@ const Options: React.FC = () => {
             </label>
             <select
               value={settings.theme}
-              onChange={(e) =>
-                setSettings({ ...settings, theme: e.target.value as Settings['theme'] })
-              }
+              onChange={async (e) => {
+                const theme = e.target.value as Settings['theme'];
+                setSettings({ ...settings, theme });
+                const isDark = theme === 'dark' ||
+                  (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.classList.toggle('dark', isDark);
+                await updateSettings({ theme });
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
             >
               <option value="light">{t('settings.themeLight')}</option>

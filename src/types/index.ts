@@ -87,18 +87,24 @@ export interface FeedFilter {
   feedId?: string; // if undefined, applies globally
   name: string;
   enabled: boolean;
-  filterType: 'include' | 'exclude';
-  matchType: 'title' | 'content' | 'author' | 'all';
-  pattern: string;
-  isRegex: boolean;
+  conditionOperator: 'AND' | 'OR';
+  conditions: FilterCondition[];
   actions: FilterAction[];
   createdAt: number;
   updatedAt: number;
 }
 
+export interface FilterCondition {
+  id: string;
+  field: 'title' | 'content' | 'author' | 'url';
+  operator: 'contains' | 'not_contains' | 'equals' | 'matches';
+  value: string;
+  isRegex: boolean;
+}
+
 export interface FilterAction {
-  type: 'mark-read' | 'mark-starred' | 'delete' | 'move-to-folder';
-  value?: string; // for move-to-folder, the folder id
+  type: 'mark-read' | 'star' | 'delete' | 'add-tag';
+  value?: string; // for add-tag, the tag name
 }
 
 export interface Settings {
