@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAppStore } from '@/store';
@@ -16,6 +17,7 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
   onOpenChange,
   onFolderAdded,
 }) => {
+  const { t } = useTranslation();
   const { addFolder, folders } = useAppStore();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
     setError('');
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('请输入文件夹名称');
+      setError(t('addFolder.nameRequired'));
       return;
     }
 
@@ -42,7 +44,7 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
       onFolderAdded();
     } catch (err) {
       console.error('Failed to add folder:', err);
-      setError('创建文件夹失败，请重试');
+      setError(t('addFolder.createFailed'));
     } finally {
       setLoading(false);
     }
@@ -55,7 +57,7 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 w-full max-w-md z-50">
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              新建文件夹
+              {t('addFolder.title')}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -65,7 +67,7 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
           </div>
 
           <Dialog.Description className="sr-only">
-            输入文件夹名称用于归类订阅源
+            {t('addFolder.description')}
           </Dialog.Description>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -74,12 +76,12 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
                 htmlFor="folder-name"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
-                文件夹名称
+                {t('addFolder.nameLabel')}
               </label>
               <Input
                 id="folder-name"
                 type="text"
-                placeholder="例如：技术博客"
+                placeholder={t('addFolder.namePlaceholder')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
@@ -97,10 +99,10 @@ export const AddFolderDialog: React.FC<AddFolderDialogProps> = ({
                 onClick={() => onOpenChange(false)}
                 disabled={loading}
               >
-                取消
+                {t('common.cancel')}
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? '创建中...' : '创建'}
+                {loading ? t('addFolder.creating') : t('addFolder.create')}
               </Button>
             </div>
           </form>

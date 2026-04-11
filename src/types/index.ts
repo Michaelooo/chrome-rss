@@ -14,6 +14,7 @@ export interface Feed {
   lastFetchStatus: 'success' | 'error' | 'pending';
   lastFetchError?: string;
   unreadCount: number;
+  fullContentFetch?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -50,6 +51,7 @@ export interface Digest {
   items: DigestItem[];
   model: string;
   generatedAt: number;
+  fullContent?: string;
   createdAt: number;
 }
 
@@ -99,6 +101,7 @@ export interface FilterAction {
 }
 
 export interface Settings {
+  language: 'zh' | 'en';
   theme: 'light' | 'dark' | 'auto';
   defaultUpdateInterval: number;
   enableNotifications: boolean;
@@ -106,12 +109,14 @@ export interface Settings {
   articleRetentionDays: number;
   openLinksInNewTab: boolean;
   markAsReadOnScroll: boolean;
+  removeScrollReadInUnreadMode: boolean;
   fontSize: 'small' | 'medium' | 'large' | 'xlarge';
   fontFamily: string;
   contentWidth: 'narrow' | 'standard' | 'wide' | 'xwide';
   compactView: boolean;
   showFeedIcons: boolean;
   enableKeyboardShortcuts: boolean;
+  defaultArticleFilter: 'all' | 'unread';
   enableTranslation: boolean;
   translationProvider: 'google';
   translationTargetLanguage: string;
@@ -122,6 +127,8 @@ export interface Settings {
   aiApiKey: string;
   aiModel: string;
   aiAutoSummarize: boolean;
+  articleTitleLines: 1 | 2 | 3;
+  articleExcerptLines: 1 | 2 | 3;
 }
 
 // RSS Feed types

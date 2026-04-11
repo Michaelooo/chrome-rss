@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { addFeed, addArticles } from '@/lib/storage/db';
@@ -20,6 +21,7 @@ export const AddFeedDialog: React.FC<AddFeedDialogProps> = ({
   onOpenChange,
   onFeedAdded,
 }) => {
+  const { t } = useTranslation();
   const { folders } = useAppStore();
   const [url, setUrl] = useState('');
   const [folderId, setFolderId] = useState<string>('');
@@ -75,7 +77,7 @@ export const AddFeedDialog: React.FC<AddFeedDialogProps> = ({
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 w-full max-w-md z-50">
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              添加新订阅源
+              {t('addFeed.title')}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -85,7 +87,7 @@ export const AddFeedDialog: React.FC<AddFeedDialogProps> = ({
           </div>
 
           <Dialog.Description className="sr-only">
-            输入 RSS 订阅源 URL 以添加新订阅
+            {t('addFeed.description')}
           </Dialog.Description>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,7 +96,7 @@ export const AddFeedDialog: React.FC<AddFeedDialogProps> = ({
                 htmlFor="feed-url"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
-                订阅源地址
+                {t('addFeed.urlLabel')}
               </label>
               <Input
                 id="feed-url"
@@ -112,7 +114,7 @@ export const AddFeedDialog: React.FC<AddFeedDialogProps> = ({
                 htmlFor="feed-folder"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
-                目标文件夹
+                {t('addFeed.folderLabel')}
               </label>
               <select
                 id="feed-folder"
@@ -124,7 +126,7 @@ export const AddFeedDialog: React.FC<AddFeedDialogProps> = ({
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500'
                 )}
               >
-                <option value="">未分类</option>
+                <option value="">{t('sidebar.uncategorized')}</option>
                 {folders.map((folder) => (
                   <option key={folder.id} value={folder.id}>
                     {folder.name}
@@ -144,10 +146,10 @@ export const AddFeedDialog: React.FC<AddFeedDialogProps> = ({
                 onClick={() => onOpenChange(false)}
                 disabled={loading}
               >
-                取消
+                {t('common.cancel')}
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? '添加中...' : '添加订阅源'}
+                {loading ? t('addFeed.adding') : t('addFeed.submit')}
               </Button>
             </div>
           </form>

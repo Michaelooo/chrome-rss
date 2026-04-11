@@ -61,7 +61,20 @@ export class FeedFetcher {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const xmlText = await response.text();
+      const buffer = await response.arrayBuffer();
+      const encoding =
+        getCharsetFromContentType(response.headers.get('content-type')) ||
+        detectXmlEncoding(buffer) ||
+        'utf-8';
+
+      let xmlText: string;
+      try {
+        xmlText = new TextDecoder(encoding).decode(buffer);
+      } catch (err) {
+        console.warn(`Decode with ${encoding} failed, fallback to utf-8`, err);
+        xmlText = new TextDecoder('utf-8').decode(buffer);
+      }
+
       return await rssParser.parse(xmlText);
     } catch (error) {
       if (error instanceof Error) {
@@ -161,6 +174,29 @@ export class FeedFetcher {
     }
     return undefined;
   }
+}
+
+function getCharsetFromContentType(contentType: string | null): string | undefined {
+  if (!contentType) return undefined;
+  const match = /charset=([^;]+)/i.exec(contentType);
+  if (!match) return undefined;
+  return normalizeEncoding(match[1]);
+}
+
+function detectXmlEncoding(buffer: ArrayBuffer): string | undefined {
+  // Decode a small slice as utf-8 to read the prolog; ascii survives even if actual charset differs.
+  const sniffLength = Math.min(buffer.byteLength, 1024);
+  const slice = buffer.slice(0, sniffLength);
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(slice);
+  const match = /encoding=["']([^"']+)["']/i.exec(text);
+  if (!match) return undefined;
+  return normalizeEncoding(match[1]);
+}
+
+function normalizeEncoding(enc: string): string {
+  const lower = enc.trim().toLowerCase();
+  if (lower === 'gbk' || lower === 'gb2312') return 'gb18030';
+  return lower || 'utf-8';
 }
 
 export const feedFetcher = new FeedFetcher();
