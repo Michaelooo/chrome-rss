@@ -69,8 +69,8 @@ export function buildDigestPrompt(articles: DigestInput[]): ChatMessage[] {
 export function parseJSONResponse<T>(raw: string): T {
   // Strip markdown code fences if present
   const cleaned = raw
-    .replace(/^```json\s*\n?/g, '')
-    .replace(/\n?``$/g, '')
+    .replace(/^```[a-z]*\s*\n?/g, '')
+    .replace(/\n?```\s*$/g, '')
     .trim();
 
   try {

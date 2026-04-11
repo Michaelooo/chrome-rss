@@ -483,6 +483,31 @@ export async function updateSettings(updates: Partial<Settings>): Promise<void> 
   }
 }
 
+// Filter operations
+export async function getFilters(): Promise<FeedFilter[]> {
+  return db.filters.toArray();
+}
+
+export async function getEnabledFiltersByFeedId(feedId: string): Promise<FeedFilter[]> {
+  const all = await db.filters.toArray();
+  return all.filter(f => f.enabled && (f.feedId === undefined || f.feedId === feedId));
+}
+
+export async function addFilter(filter: Omit<FeedFilter, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  await db.filters.add({ ...filter, id, createdAt: now, updatedAt: now });
+  return id;
+}
+
+export async function updateFilter(id: string, updates: Partial<FeedFilter>): Promise<void> {
+  await db.filters.update(id, { ...updates, updatedAt: Date.now() });
+}
+
+export async function deleteFilter(id: string): Promise<void> {
+  await db.filters.delete(id);
+}
+
 // Digest operations
 export async function addDigest(digest: Omit<Digest, 'id' | 'createdAt'>): Promise<string> {
   const id = crypto.randomUUID();

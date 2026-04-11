@@ -43,6 +43,25 @@ export const MainLayout: React.FC = () => {
     }
   }, [settings?.language]);
 
+  // Apply theme from settings
+  useEffect(() => {
+    if (!settings?.theme) return;
+    const isDark = settings.theme === 'dark' ||
+      (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [settings?.theme]);
+
+  // Listen for system theme changes when in 'auto' mode
+  useEffect(() => {
+    if (settings?.theme !== 'auto') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      document.documentElement.classList.toggle('dark', e.matches);
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [settings?.theme]);
+
   const articleListWidth = Math.max(ARTICLE_LIST_MIN, uiState.articleListWidth || 0);
   const sidebarWidth = Math.max(SIDEBAR_MIN, uiState.sidebarWidth || 0);
 

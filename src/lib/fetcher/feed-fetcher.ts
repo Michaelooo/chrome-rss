@@ -1,6 +1,7 @@
 import type { Feed, RSSFeed, RSSItem, Article } from '@/types';
 import { rssParser } from '../parser/rss-parser';
-import { db, addArticles, updateFeed } from '../storage/db';
+import { db, addArticles, updateFeed, getEnabledFiltersByFeedId } from '../storage/db';
+import { applyFilters } from '../filter/engine';
 
 export interface FetchResult {
   success: boolean;
@@ -117,7 +118,12 @@ export class FeedFetcher {
         const newArticles = newItems.map(({ item, guid }) =>
           rssItemToArticle(item, feed.id, guid)
         );
-        await addArticles(newArticles);
+
+        // Apply filter rules
+        const filters = await getEnabledFiltersByFeedId(feed.id);
+        const filteredArticles = applyFilters(newArticles, filters);
+
+        await addArticles(filteredArticles);
 
         // Update feed metadata
         await updateFeed(feed.id, {
@@ -127,7 +133,7 @@ export class FeedFetcher {
           lastFetchTime: Date.now(),
           lastFetchStatus: 'success',
           lastFetchError: undefined,
-          unreadCount: feed.unreadCount + newItems.length,
+          unreadCount: feed.unreadCount + filteredArticles.length,
         });
       } else {
         // No new articles, just update fetch time

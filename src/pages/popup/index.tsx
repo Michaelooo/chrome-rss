@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Rss, Settings, ExternalLink, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { db, getRecentUnreadArticles, recalcFeedUnreadCount } from '@/lib/storage/db';
+import { db, getRecentUnreadArticles, recalcFeedUnreadCount, getSettings } from '@/lib/storage/db';
 import type { Article } from '@/types';
 import { formatRelativeTime } from '@/lib/utils';
 import { updateUnreadBadge } from '@/lib/chrome/badge';
@@ -39,6 +39,12 @@ const Popup: React.FC = () => {
 
   useEffect(() => {
     loadData(true).catch(error => console.error('Failed to load popup data:', error));
+    // Apply theme
+    getSettings().then(s => {
+      const isDark = s.theme === 'dark' ||
+        (s.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.classList.toggle('dark', isDark);
+    });
   }, []);
 
   const handleOpenMain = () => {

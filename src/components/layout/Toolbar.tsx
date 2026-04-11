@@ -52,33 +52,6 @@ export const Toolbar: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setUIState({ filterBy: 'unread' })}
-            title={t('toolbar.showUnread')}
-            className={uiState.filterBy === 'unread' ? 'bg-gray-100 dark:bg-gray-800 text-blue-600 dark:text-blue-400' : ''}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-              <circle cx="18.5" cy="5.5" r="3" fill="currentColor" stroke="none"/>
-            </svg>
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setUIState({ filterBy: 'all' })}
-            title={t('toolbar.showAll')}
-            className={uiState.filterBy === 'all' ? 'bg-gray-100 dark:bg-gray-800 text-blue-600 dark:text-blue-400' : ''}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
             onClick={() => setShowStorageDialog(true)}
             title={t('toolbar.storageManagement')}
           >
