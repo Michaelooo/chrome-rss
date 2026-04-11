@@ -86,6 +86,14 @@ async function updateAllFeeds(force = false) {
 
     await updateUnreadBadge();
 
+    // Notify UI pages to reload feeds
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, { type: 'FEEDS_UPDATED' }).catch(() => {/* tab may not have listener */});
+      }
+    }
+
     // Auto-summarize new articles if AI is enabled
     await autoSummarizeNewArticles();
 

@@ -59,25 +59,72 @@ export class RSSDatabase extends Dexie {
             .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
         }
       });
+
+    this.version(4)
+      .stores({})
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
+        }
+      });
+
+    this.version(5)
+      .stores({})
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
+        }
+      });
+
+    this.version(6)
+      .stores({})
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
+        }
+      });
+
+    this.version(7)
+      .stores({})
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
+        }
+      });
   }
 }
 
 export const db = new RSSDatabase();
 
 const defaultSettings = {
+  language: 'zh' as const,
   theme: 'auto' as const,
   defaultUpdateInterval: 30,
   enableNotifications: true,
   maxArticlesPerFeed: 500,
   articleRetentionDays: 30,
   openLinksInNewTab: true,
-  markAsReadOnScroll: false,
+  markAsReadOnScroll: true,
+  removeScrollReadInUnreadMode: false,
   fontSize: 'medium' as const,
   fontFamily: 'system-ui',
   contentWidth: 'standard' as const,
   compactView: false,
   showFeedIcons: true,
   enableKeyboardShortcuts: true,
+  defaultArticleFilter: 'unread' as const,
   enableTranslation: false,
   translationProvider: 'google' as const,
   translationTargetLanguage: 'zh-CN',
@@ -88,6 +135,8 @@ const defaultSettings = {
   aiApiKey: '',
   aiModel: 'gpt-4o-2024-11-20',
   aiAutoSummarize: false,
+  articleTitleLines: 1 as const,
+  articleExcerptLines: 2 as const,
 };
 
 function mergeSettingsWithDefaults(partial: Partial<Settings>): Settings {

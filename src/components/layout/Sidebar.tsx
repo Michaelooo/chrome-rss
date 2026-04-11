@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus, Newspaper } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/ScrollArea';
+import { Rss, Star, Trash2, Folder, ChevronRight, ChevronDown, Plus, FolderPlus, Newspaper, Pencil } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { useAppStore } from '@/store';
 import { cn } from '@/lib/utils';
@@ -16,12 +16,29 @@ import { subscribeArticleUpdated } from '@/lib/events/articles';
 import { AddFolderDialog } from '@/components/feed/AddFolderDialog';
 import { AddFeedDialog } from '@/components/feed/AddFeedDialog';
 import { FolderRenameDialog } from '@/components/feed/FolderRenameDialog';
-
-const STALE_THRESHOLD_MS = 365 * 24 * 60 * 60 * 1000;
+import { EditFeedDialog } from '@/components/feed/EditFeedDialog';
 
 type DragPayload = { type: 'feed'; id: string } | { type: 'folder'; id: string };
 
+function CountBadge({ count, tone = 'primary' }: { count: number; tone?: 'primary' | 'starred' }) {
+  if (count <= 0) return null;
+
+  return (
+    <span
+      className={cn(
+        'flex-shrink-0 inline-flex min-w-[22px] justify-center px-1.5 text-[11px] font-medium rounded',
+        tone === 'primary'
+          ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200'
+          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-200'
+      )}
+    >
+      {count}
+    </span>
+  );
+}
+
 export const Sidebar: React.FC = () => {
+  const { t } = useTranslation();
   const {
     feeds,
     folders,
@@ -42,10 +59,10 @@ export const Sidebar: React.FC = () => {
     null
   );
   const [starredCount, setStarredCount] = useState<number>(0);
-  const [inactiveFeedIds, setInactiveFeedIds] = useState<Set<string>>(new Set());
   const [showAddFolder, setShowAddFolder] = useState(false);
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [renameFolder, setRenameFolder] = useState<FolderType | null>(null);
+  const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const droppedRef = useRef(false);
 
   const rootFeeds = useMemo(
@@ -101,47 +118,13 @@ export const Sidebar: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const evaluateFeedActivity = async () => {
-      if (feeds.length === 0) {
-        if (!cancelled) setInactiveFeedIds(new Set());
-        return;
-      }
-      const cutoff = Date.now() - STALE_THRESHOLD_MS;
-      try {
-        const results = await Promise.all(
-          feeds.map(async feed => {
-            const latestArticle = await db.articles
-              .where('[feedId+pubDate]')
-              .between([feed.id, 0], [feed.id, Number.MAX_SAFE_INTEGER])
-              .last();
-            const latestActivity =
-              latestArticle?.pubDate ?? feed.lastFetchTime ?? feed.createdAt ?? 0;
-            return { feedId: feed.id, isInactive: latestActivity < cutoff };
-          })
-        );
-        if (!cancelled) {
-          setInactiveFeedIds(
-            new Set(results.filter(r => r.isInactive).map(r => r.feedId))
-          );
-        }
-      } catch (error) {
-        console.error('Failed to evaluate feed activity:', error);
-        if (!cancelled) setInactiveFeedIds(new Set());
-      }
-    };
-    evaluateFeedActivity();
-    return () => { cancelled = true; };
-  }, [feeds]);
-
   const totalUnread = useMemo(
     () => feeds.reduce((sum, feed) => sum + (feed.unreadCount || 0), 0),
     [feeds]
   );
 
   const isAllItemsSelected =
-    uiState.filterBy === 'all' && !uiState.selectedFeedId && !uiState.selectedFolderId;
+    uiState.filterBy === 'unread' && !uiState.selectedFeedId && !uiState.selectedFolderId;
   const isStarredSelected =
     uiState.filterBy === 'starred' && !uiState.selectedFeedId && !uiState.selectedFolderId;
   const isDigestSelected = uiState.specialView === 'digest';
@@ -151,7 +134,6 @@ export const Sidebar: React.FC = () => {
       selectedFeedId: feedId,
       selectedFolderId: undefined,
       selectedArticleId: undefined,
-      filterBy: 'all',
       specialView: undefined,
     });
   };
@@ -161,7 +143,6 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: folderId,
       selectedFeedId: undefined,
       selectedArticleId: undefined,
-      filterBy: 'all',
       specialView: undefined,
     });
   };
@@ -175,7 +156,7 @@ export const Sidebar: React.FC = () => {
       selectedFeedId: undefined,
       selectedFolderId: undefined,
       selectedArticleId: undefined,
-      filterBy: 'all',
+      filterBy: 'unread',
       specialView: undefined,
     });
   };
@@ -330,7 +311,7 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleDeleteFeed = async (feedId: string) => {
-    if (!confirm('确定要删除这个订阅源吗？删除后将无法恢复，相关的文章也会被删除。')) {
+    if (!confirm(t('sidebar.confirmDeleteFeed'))) {
       return;
     }
 
@@ -346,12 +327,12 @@ export const Sidebar: React.FC = () => {
       await recalcAllFeedUnreadCounts();
     } catch (error) {
       console.error('删除订阅源失败:', error);
-      alert('删除订阅源失败，请稍后重试');
+      alert(t('sidebar.deleteFeedFailed'));
     }
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    if (!confirm('确定要删除这个文件夹吗？其中的订阅源将移到未分类。')) return;
+    if (!confirm(t('sidebar.confirmDeleteFolder'))) return;
     try {
       await deleteFolder(folderId);
       if (uiState.selectedFolderId === folderId) {
@@ -364,7 +345,7 @@ export const Sidebar: React.FC = () => {
       await loadFolders();
     } catch (error) {
       console.error('删除文件夹失败:', error);
-      alert('删除文件夹失败，请稍后重试');
+      alert(t('sidebar.deleteFolderFailed'));
     }
   };
 
@@ -373,7 +354,12 @@ export const Sidebar: React.FC = () => {
       key={feed.id}
       items={[
         {
-          label: '删除订阅源',
+          label: t('sidebar.edit'),
+          icon: <Pencil className="w-4 h-4" />,
+          onClick: () => setEditingFeed(feed),
+        },
+        {
+          label: t('sidebar.deleteFeed'),
           icon: <Trash2 className="w-4 h-4" />,
           onClick: () => handleDeleteFeed(feed.id),
           variant: 'destructive',
@@ -388,7 +374,7 @@ export const Sidebar: React.FC = () => {
         onDrop={e => e.preventDefault()}
         onClick={() => handleFeedClick(feed.id)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+          'w-full max-w-full min-w-0 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
           indent && 'pl-8',
           'hover:bg-gray-100 dark:hover:bg-gray-800',
           uiState.selectedFeedId === feed.id
@@ -402,17 +388,8 @@ export const Sidebar: React.FC = () => {
         ) : (
           <Rss className="w-4 h-4 flex-shrink-0" />
         )}
-        <span className="flex-1 text-left truncate">{feed.title}</span>
-        <div className="ml-auto flex items-center gap-2">
-          {inactiveFeedIds.has(feed.id) && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-              作者潜水中
-            </span>
-          )}
-          {feed.unreadCount > 0 && (
-            <span className="text-xs text-gray-500">{feed.unreadCount}</span>
-          )}
-        </div>
+        <span className="min-w-0 flex-1 text-left truncate">{feed.title}</span>
+        <CountBadge count={feed.unreadCount ?? 0} />
       </button>
     </ContextMenu>
   );
@@ -424,16 +401,16 @@ export const Sidebar: React.FC = () => {
     const isDropTarget = dropTarget?.type === 'folder' && dropTarget.id === folder.id;
 
     return (
-      <div key={folder.id} className="space-y-0">
+      <div key={folder.id} className="w-full max-w-full overflow-hidden space-y-0">
         <ContextMenu
           items={[
             {
-              label: '重命名',
+              label: t('sidebar.rename'),
               icon: <Folder className="w-4 h-4" />,
               onClick: () => setRenameFolder(folder),
             },
             {
-              label: '删除文件夹',
+              label: t('sidebar.deleteFolder'),
               icon: <Trash2 className="w-4 h-4" />,
               onClick: () => handleDeleteFolder(folder.id),
               variant: 'destructive',
@@ -448,7 +425,7 @@ export const Sidebar: React.FC = () => {
             onDrop={e => handleDrop(e, { type: 'folder', id: folder.id })}
             onDragEnd={() => dragging?.type === 'folder' && setDragging(null)}
             className={cn(
-              'flex items-center gap-1 rounded-md text-sm transition-colors',
+              'flex w-full max-w-full min-w-0 overflow-hidden items-center gap-1 rounded-md text-sm transition-colors',
               'hover:bg-gray-100 dark:hover:bg-gray-800',
               isSelected && 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400',
               isDropTarget && 'ring-2 ring-primary-500/50',
@@ -472,18 +449,16 @@ export const Sidebar: React.FC = () => {
             <button
               type="button"
               onClick={() => handleFolderClick(folder.id)}
-              className="flex-1 flex items-center gap-2 px-2 py-2 text-left min-w-0"
+              className="flex-1 min-w-0 flex items-center gap-2 pl-1 pr-3 py-2 text-left"
             >
               <Folder className="w-4 h-4 flex-shrink-0 text-gray-500" />
-              <span className="flex-1 truncate">{folder.name}</span>
-              <span className="text-xs text-gray-500">
-                {folderFeeds.reduce((s, f) => s + (f.unreadCount || 0), 0)}
-              </span>
+              <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+              <CountBadge count={folderFeeds.reduce((s, f) => s + (f.unreadCount || 0), 0)} />
             </button>
           </div>
         </ContextMenu>
         {isExpanded && (
-          <div className="space-y-0">
+          <div className="w-full max-w-full overflow-hidden space-y-0">
             {folderFeeds.map(feed => renderFeedItem(feed, true))}
           </div>
         )}
@@ -505,20 +480,20 @@ export const Sidebar: React.FC = () => {
             : 'border-transparent'
       )}
     >
-      {rootFeeds.length > 0 && '未分类'}
+      {rootFeeds.length > 0 && t('sidebar.uncategorized')}
     </div>
   );
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full w-full max-w-full min-w-0 overflow-hidden flex flex-col">
       <div className="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-        <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">订阅源</h2>
+        <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">{t('sidebar.feeds')}</h2>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setShowAddFeed(true)}
             className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-            title="添加新订阅源"
+            title={t('sidebar.addFeed')}
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -526,20 +501,20 @@ export const Sidebar: React.FC = () => {
             type="button"
             onClick={() => setShowAddFolder(true)}
             className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-            title="新增文件夹"
+            title={t('sidebar.addFolder')}
           >
             <FolderPlus className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-        <ScrollArea className="flex-1">
-        <div className="p-2 space-y-3">
-          <div className="rounded-lg bg-white/80 dark:bg-gray-800/80 p-1.5 space-y-0.5 shadow-sm">
+        <div className="w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:theme(colors.gray.300)_transparent] dark:[scrollbar-color:theme(colors.gray.700)_transparent]">
+        <div className="w-full overflow-x-hidden space-y-3 p-2">
+          <div className="w-full max-w-full rounded-lg bg-white/80 dark:bg-gray-800/80 p-1.5 space-y-0.5 shadow-sm">
             <button
               onClick={handleAllItemsClick}
               className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                'w-full max-w-full min-w-0 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
                 'hover:bg-gray-100 dark:hover:bg-gray-700',
                 isAllItemsSelected
                   ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
@@ -547,14 +522,14 @@ export const Sidebar: React.FC = () => {
               )}
             >
               <Rss className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1 text-left">我的未读</span>
-              <span className="text-xs text-gray-500">{totalUnread}</span>
+              <span className="min-w-0 flex-1 text-left truncate">{t('sidebar.myUnread')}</span>
+              <CountBadge count={totalUnread} />
             </button>
 
             <button
               onClick={handleStarredClick}
               className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                'w-full max-w-full min-w-0 flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
                 'hover:bg-gray-100 dark:hover:bg-gray-700',
                 isStarredSelected
                   ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
@@ -562,8 +537,22 @@ export const Sidebar: React.FC = () => {
               )}
             >
               <Star className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1 text-left">我的收藏</span>
-              <span className="text-xs text-gray-500">{starredCount}</span>
+              <span className="min-w-0 flex-1 text-left truncate">{t('sidebar.myStarred')}</span>
+              <CountBadge count={starredCount} tone="starred" />
+            </button>
+
+            <button
+              onClick={handleDigestClick}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                'hover:bg-gray-100 dark:hover:bg-gray-700',
+                isDigestSelected
+                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                  : 'text-gray-700 dark:text-gray-300'
+              )}
+            >
+              <Newspaper className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1 text-left">今日简报</span>
             </button>
 
             <button
@@ -581,14 +570,14 @@ export const Sidebar: React.FC = () => {
             </button>
           </div>
 
-          <div className="space-y-1">
+          <div className="w-full max-w-full overflow-hidden space-y-1">
             {orderedFolders.map(folder => renderFolder(folder))}
 
             {rootDropZone}
             {rootFeeds.map(feed => renderFeedItem(feed))}
           </div>
         </div>
-        </ScrollArea>
+        </div>
 
         <AddFolderDialog
           open={showAddFolder}
@@ -605,6 +594,15 @@ export const Sidebar: React.FC = () => {
           onOpenChange={open => !open && setRenameFolder(null)}
           folder={renameFolder}
           onRenamed={() => setRenameFolder(null)}
+        />
+        <EditFeedDialog
+          open={!!editingFeed}
+          onOpenChange={open => !open && setEditingFeed(null)}
+          feed={editingFeed}
+          onSaved={() => {
+            setEditingFeed(null);
+            loadFeeds();
+          }}
         />
     </div>
   );
