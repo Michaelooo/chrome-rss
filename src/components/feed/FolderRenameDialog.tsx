@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAppStore } from '@/store';
@@ -19,6 +20,7 @@ export const FolderRenameDialog: React.FC<FolderRenameDialogProps> = ({
   folder,
   onRenamed,
 }) => {
+  const { t } = useTranslation();
   const { updateFolder } = useAppStore();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +40,7 @@ export const FolderRenameDialog: React.FC<FolderRenameDialogProps> = ({
     setError('');
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('请输入文件夹名称');
+      setError(t('renameFolder.nameRequired'));
       return;
     }
 
@@ -49,7 +51,7 @@ export const FolderRenameDialog: React.FC<FolderRenameDialogProps> = ({
       onRenamed();
     } catch (err) {
       console.error('Failed to rename folder:', err);
-      setError('重命名失败，请重试');
+      setError(t('renameFolder.renameFailed'));
     } finally {
       setLoading(false);
     }
@@ -62,7 +64,7 @@ export const FolderRenameDialog: React.FC<FolderRenameDialogProps> = ({
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 w-full max-w-md z-50">
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              重命名文件夹
+              {t('renameFolder.title')}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -72,7 +74,7 @@ export const FolderRenameDialog: React.FC<FolderRenameDialogProps> = ({
           </div>
 
           <Dialog.Description className="sr-only">
-            修改文件夹名称
+            {t('renameFolder.description')}
           </Dialog.Description>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -81,12 +83,12 @@ export const FolderRenameDialog: React.FC<FolderRenameDialogProps> = ({
                 htmlFor="folder-rename"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
-                文件夹名称
+                {t('renameFolder.nameLabel')}
               </label>
               <Input
                 id="folder-rename"
                 type="text"
-                placeholder="例如：技术博客"
+                placeholder={t('renameFolder.namePlaceholder')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
@@ -104,10 +106,10 @@ export const FolderRenameDialog: React.FC<FolderRenameDialogProps> = ({
                 onClick={() => onOpenChange(false)}
                 disabled={loading}
               >
-                取消
+                {t('common.cancel')}
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? '保存中...' : '保存'}
+                {loading ? t('renameFolder.saving') : t('renameFolder.save')}
               </Button>
             </div>
           </form>
