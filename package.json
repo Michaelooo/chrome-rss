@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && vite build --config vite.config.background.ts",
-    "build:bg": "vite build --config vite.config.background.ts",
+    "build": "tsc && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "build:zip": "npm run build && node scripts/create-zip.js"

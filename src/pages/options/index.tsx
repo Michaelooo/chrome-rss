@@ -78,9 +78,14 @@ const Options: React.FC = () => {
             </label>
             <select
               value={settings.theme}
-              onChange={(e) =>
-                setSettings({ ...settings, theme: e.target.value as Settings['theme'] })
-              }
+              onChange={async (e) => {
+                const theme = e.target.value as Settings['theme'];
+                setSettings({ ...settings, theme });
+                const isDark = theme === 'dark' ||
+                  (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.classList.toggle('dark', isDark);
+                await updateSettings({ theme });
+              }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
             >
               <option value="light">{t('settings.themeLight')}</option>
@@ -389,6 +394,88 @@ const Options: React.FC = () => {
 
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {t('settings.translationNote')}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* AI Summary */}
+          <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">AI 摘要</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  使用 OpenAI 兼容 API 自动生成文章摘要和关键词。支持 OpenAI、DeepSeek、Ollama 等。
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.enableAI}
+                onChange={(e) =>
+                  setSettings({ ...settings, enableAI: e.target.checked })
+                }
+                className="w-4 h-4"
+              />
+            </div>
+
+            {settings.enableAI && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    API 地址
+                  </label>
+                  <Input
+                    value={settings.aiApiEndpoint}
+                    onChange={(e) =>
+                      setSettings({ ...settings, aiApiEndpoint: e.target.value })
+                    }
+                    placeholder="https://api.openai.com/v1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    API Key
+                  </label>
+                  <Input
+                    type="password"
+                    value={settings.aiApiKey}
+                    onChange={(e) =>
+                      setSettings({ ...settings, aiApiKey: e.target.value })
+                    }
+                    placeholder="sk-..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    模型名称
+                  </label>
+                  <Input
+                    value={settings.aiModel}
+                    onChange={(e) =>
+                      setSettings({ ...settings, aiModel: e.target.value })
+                    }
+                    placeholder="gpt-4o-mini"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    获取新文章时自动生成摘要
+                  </label>
+                  <input
+                    type="checkbox"
+                    checked={settings.aiAutoSummarize}
+                    onChange={(e) =>
+                      setSettings({ ...settings, aiAutoSummarize: e.target.checked })
+                    }
+                    className="w-4 h-4"
+                  />
+                </div>
+
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  API Key 仅存储在本地 IndexedDB 中，不会传输到除你配置的 API 地址以外的任何服务器。
                 </p>
               </div>
             )}

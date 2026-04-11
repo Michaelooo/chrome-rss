@@ -54,3 +54,6 @@ coverage/
 
 # Chrome extension private key (keep key.pem local, do not commit)
 key.pem
+
+# Local setup notes (contains internal URLs, do not commit)
+LOCAL_SETUP.md

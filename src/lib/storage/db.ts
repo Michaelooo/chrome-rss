@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Feed, Article, Folder, FeedFilter, Settings } from '@/types';
+import type { Feed, Article, Folder, FeedFilter, Settings, Digest } from '@/types';
 
 export class RSSDatabase extends Dexie {
   feeds!: Table<Feed, string>;
@@ -7,6 +7,8 @@ export class RSSDatabase extends Dexie {
   folders!: Table<Folder, string>;
   filters!: Table<FeedFilter, string>;
   settings!: Table<Settings, number>;
+  digests!: Table<Digest, string>;
+
 
   constructor() {
     super('RSSReaderDB');
@@ -30,6 +32,24 @@ export class RSSDatabase extends Dexie {
         folders: 'id, parentId, order',
         filters: 'id, feedId, enabled',
         settings: '++id',
+      })
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
+        }
+      });
+
+    this.version(4)
+      .stores({
+        feeds: 'id, url, folderId, lastFetchTime, unreadCount',
+        articles: 'id, feedId, pubDate, isRead, isStarred, [feedId+isRead], [feedId+pubDate], [isStarred+starredAt]',
+        folders: 'id, parentId, order',
+        filters: 'id, feedId, enabled',
+        settings: '++id',
+        digests: 'id, date, generatedAt',
       })
       .upgrade(async transaction => {
         const settings = await transaction.table('settings').toArray();
@@ -110,6 +130,11 @@ const defaultSettings = {
   translationTargetLanguage: 'zh-CN',
   translationSourceLanguage: '',
   translationAutoFetch: false,
+  enableAI: false,
+  aiApiEndpoint: 'https://api.openai.com/v1',
+  aiApiKey: '',
+  aiModel: 'gpt-4o-2024-11-20',
+  aiAutoSummarize: false,
   articleTitleLines: 1 as const,
   articleExcerptLines: 2 as const,
 };
@@ -456,4 +481,49 @@ export async function updateSettings(updates: Partial<Settings>): Promise<void> 
   if (settings.length > 0) {
     await db.settings.update(1, updates);
   }
+}
+
+// Filter operations
+export async function getFilters(): Promise<FeedFilter[]> {
+  return db.filters.toArray();
+}
+
+export async function getEnabledFiltersByFeedId(feedId: string): Promise<FeedFilter[]> {
+  const all = await db.filters.toArray();
+  return all.filter(f => f.enabled && (f.feedId === undefined || f.feedId === feedId));
+}
+
+export async function addFilter(filter: Omit<FeedFilter, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  await db.filters.add({ ...filter, id, createdAt: now, updatedAt: now });
+  return id;
+}
+
+export async function updateFilter(id: string, updates: Partial<FeedFilter>): Promise<void> {
+  await db.filters.update(id, { ...updates, updatedAt: Date.now() });
+}
+
+export async function deleteFilter(id: string): Promise<void> {
+  await db.filters.delete(id);
+}
+
+// Digest operations
+export async function addDigest(digest: Omit<Digest, 'id' | 'createdAt'>): Promise<string> {
+  const id = crypto.randomUUID();
+  await db.digests.add({
+    ...digest,
+    id,
+    createdAt: Date.now(),
+  });
+  return id;
+}
+
+export async function getDigestByDate(date: string): Promise<Digest | undefined> {
+  return await db.digests.where('date').equals(date).first();
+}
+
+export async function getLatestDigest(): Promise<Digest | undefined> {
+  const all = await db.digests.orderBy('generatedAt').reverse().toArray();
+  return all[0];
 }
