@@ -543,11 +543,6 @@ const ArticleItem: React.FC<ArticleItemProps> = ({
     onToggleRead();
   };
 
-  const handleReadClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onToggleRead();
-  };
-
   const hasSummary = !!article.summary?.text;
   
   const description = article.description || article.content || '';

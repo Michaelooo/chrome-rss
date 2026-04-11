@@ -43,6 +43,7 @@ export interface Article {
   translations?: Record<string, ArticleTranslation>;
   summary?: ArticleSummary;
   createdAt: number;
+  fullContent?: string;
 }
 
 export interface Digest {
