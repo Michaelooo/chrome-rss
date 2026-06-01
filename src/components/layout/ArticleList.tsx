@@ -423,9 +423,22 @@ export const ArticleList: React.FC = () => {
         ref={headerRef}
         className="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2"
       >
-        <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-          {t('articleList.articlesHeader', { count: unreadCount })}
-        </h2>
+        <div className="flex items-center gap-1">
+          {(['all', 'unread', 'starred'] as const).map(filter => (
+            <button
+              key={filter}
+              onClick={() => setUIState({ filterBy: filter })}
+              className={cn(
+                'px-2 py-0.5 text-xs rounded-md transition-colors',
+                uiState.filterBy === filter
+                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-medium'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              )}
+            >
+              {t(`articleList.filter${filter.charAt(0).toUpperCase() + filter.slice(1)}`)}
+            </button>
+          ))}
+        </div>
 
         <div className="flex items-center gap-2">
             <Button

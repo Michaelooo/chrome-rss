@@ -17,6 +17,8 @@
     "themeAuto": "Follow System",
     "updateInterval": "Default update interval (minutes)",
     "enableNotifications": "Enable Notifications",
+    "autoFetchFullContent": "Auto-fetch full content by default",
+    "autoFetchFullContentDesc": "Automatically fetch full content from the original webpage when opening articles. Can be overridden per feed.",
     "maxArticlesPerFeed": "Max articles per feed",
     "articleRetentionDays": "Article retention (days)",
     "readingStyle": "Reading Style",
@@ -85,7 +87,10 @@
     "markAllRead": "Mark all as read",
     "markAllUnread": "Mark all as unread",
     "markRead": "Mark as read",
-    "markUnread": "Mark as unread"
+    "markUnread": "Mark as unread",
+    "filterAll": "All",
+    "filterUnread": "Unread",
+    "filterStarred": "Starred"
   },
   "articleReader": {
     "selectArticle": "Select an article to read",

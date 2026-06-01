@@ -44,6 +44,10 @@
     @apply my-4;
   }
 
+  .article-content img {
+    @apply max-w-full h-auto;
+  }
+
   .article-content :where(h1, h2, h3, h4) {
     @apply mt-8 mb-4 font-semibold text-gray-900 dark:text-gray-100;
   }

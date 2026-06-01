@@ -326,16 +326,14 @@ export const ArticleReader: React.FC = () => {
     }
   };
 
-  // Auto-fetch full content when the feed has fullContentFetch enabled
-  // and the article doesn't have full content yet
   useEffect(() => {
     if (!article) return;
     if (article.fullContent) return;
     const feed = feeds.find(f => f.id === article.feedId);
-    if (!feed?.fullContentFetch) return;
+    if (!feed?.fullContentFetch && !settings?.autoFetchFullContent) return;
     void handleFetchFullContent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [article?.id, feeds]);
+  }, [article?.id, feeds, settings?.autoFetchFullContent]);
 
   useEffect(() => {
     if (!article) return;
@@ -548,10 +546,15 @@ export const ArticleReader: React.FC = () => {
   };
 
   const renderedContentHtml = useMemo(() => {
+    let html: string;
     if (showTranslation && activeTranslation) {
-      return activeTranslation.contentHtml;
+      html = activeTranslation.contentHtml;
+    } else {
+      html = article?.fullContent || article?.content || article?.description || '';
     }
-    return article?.fullContent || article?.content || article?.description || '';
+    // Decode entity-encoded HTML tags: &lt;img ...&gt; → <img ...>
+    html = html.replace(/&lt;\s*(\/?\s*(?:img|br|hr|source|video|audio|picture|figure|figcaption|p|div|span|a|table|tr|td|th|ul|ol|li|h[1-6]|blockquote|pre|code|em|strong|b|i|u|s|del|ins|mark|sub|sup|iframe)\b)([^]*?)&gt;/gi, '<$1$2>');
+    return html;
   }, [showTranslation, activeTranslation, article]);
 
   const translationInfo = useMemo(() => {
@@ -783,15 +786,22 @@ export const ArticleReader: React.FC = () => {
             <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">AI 摘要</h3>
-                {!article.summary && (
-                  <Button variant="ghost" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing}>
-                    {isSummarizing ? '生成中...' : '生成摘要'}
-                  </Button>
-                )}
+                <Button variant="ghost" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing}>
+                  {isSummarizing ? '生成中...' : article.summary ? '重新生成' : '生成摘要'}
+                </Button>
               </div>
               {article.summary ? (
                 <>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{article.summary.text}</p>
+                  <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+                    {article.summary.text.split('\n').map((line, i) => {
+                      const trimmed = line.trim();
+                      if (!trimmed) return <br key={i} />;
+                      if (trimmed.startsWith('- ')) {
+                        return <p key={i} className="pl-3 my-0.5 before:content-['•'] before:mr-2 before:text-gray-400">{trimmed.slice(2)}</p>;
+                      }
+                      return <p key={i} className="my-1">{trimmed}</p>;
+                    })}
+                  </div>
                   {article.summary.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3">
                       {article.summary.tags.map(tag => (

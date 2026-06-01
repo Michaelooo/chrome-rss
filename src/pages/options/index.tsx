@@ -127,6 +127,26 @@ const Options: React.FC = () => {
             />
           </div>
 
+          {/* Auto Fetch Full Content */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('settings.autoFetchFullContent')}
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {t('settings.autoFetchFullContentDesc')}
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={settings.autoFetchFullContent ?? true}
+              onChange={(e) =>
+                setSettings({ ...settings, autoFetchFullContent: e.target.checked })
+              }
+              className="w-4 h-4"
+            />
+          </div>
+
           {/* Max Articles Per Feed */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

@@ -134,6 +134,7 @@ export interface Settings {
   aiApiKey: string;
   aiModel: string;
   aiAutoSummarize: boolean;
+  autoFetchFullContent: boolean;
   articleTitleLines: 1 | 2 | 3;
   articleExcerptLines: 1 | 2 | 3;
 }

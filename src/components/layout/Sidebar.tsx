@@ -145,6 +145,7 @@ export const Sidebar: React.FC = () => {
       selectedFolderId: undefined,
       selectedArticleId: undefined,
       specialView: undefined,
+      filterBy: 'all',
     });
   };
 

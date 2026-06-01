@@ -135,6 +135,7 @@ const defaultSettings = {
   aiApiKey: '',
   aiModel: 'gpt-4o-2024-11-20',
   aiAutoSummarize: false,
+  autoFetchFullContent: true,
   articleTitleLines: 1 as const,
   articleExcerptLines: 2 as const,
 };

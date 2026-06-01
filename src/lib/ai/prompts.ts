@@ -1,6 +1,6 @@
 import type { ChatMessage } from './client';
 
-const MAX_CONTENT_LENGTH = 3000;
+const MAX_CONTENT_LENGTH = 6000;
 
 export function buildSummarizePrompt(title: string, content: string): ChatMessage[] {
   const truncated = content.length > MAX_CONTENT_LENGTH
@@ -10,12 +10,21 @@ export function buildSummarizePrompt(title: string, content: string): ChatMessag
   return [
     {
       role: 'system',
-      content: `你是一个信息提取助手。无论文章是什么语言，输出必须全部使用中文。请对以下文章生成：
-1. 一段 4-6 句话的核心摘要，包含：文章的核心观点、关键数据或事实、结论或影响
-2. 3-5 个关键词标签
+      content: `你是一个专业的信息提取助手。无论文章是什么语言，输出必须全部使用中文。
+
+你的任务是对文章生成一份详细的结构化摘要，要求如下：
+
+1. summary 字段必须包含以下三个部分，用换行符分隔：
+   - 第一段：2-3句话概括文章的核心主题和背景
+   - 第二段：列出 4-8 个关键要点，每个要点独占一行，以"- "开头，要点必须包含具体的数据、技术细节、人名或事实，不要泛泛而谈
+   - 第三段：1-2句话总结文章的结论、影响或意义
+
+2. tags 字段：提取 3-5 个关键词标签
+
+重要：summary 的总长度应在 200-500 字之间，不要过于精简。
 
 以纯 JSON 格式返回，不允许添加 markdown 代码围栏或其他文字：
-{"summary": "...", "tags": ["...", "..."]}`,
+{"summary": "核心概括（2-3句话）\\n\\n- 要点1（含具体数据或事实）\\n- 要点2\\n- 要点3\\n- 要点4\\n\\n结论与意义", "tags": ["标签1", "标签2", "标签3"]}`,
     },
     {
       role: 'user',
