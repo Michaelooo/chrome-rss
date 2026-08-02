@@ -638,12 +638,6 @@ const ArticleItem: React.FC<ArticleItemProps> = ({
             </h3>
           </div>
 
-          {presentation?.relevance?.recommendationReason && (
-            <p className="mb-2 line-clamp-1 text-[11px] text-amber-700 dark:text-amber-300">
-              推荐：{presentation.relevance.recommendationReason}
-            </p>
-          )}
-
           <p className={cn('text-xs text-gray-600 dark:text-gray-400 mb-2', excerptClass)}>
             {excerpt}
           </p>

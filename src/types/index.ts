@@ -111,17 +111,10 @@ export interface AttentionAnalysisData {
   };
 }
 
-export interface PersonalRelevanceData {
-  relevance: 'high' | 'medium' | 'low' | 'none';
-  matchedTopics: string[];
-  recommendationReason: string;
-}
-
 export type ArticleArtifactKind =
   | 'title-translation'
   | 'body-translation'
-  | 'attention-analysis'
-  | 'personal-relevance';
+  | 'attention-analysis';
 
 export interface ArticleArtifact {
   id: string;
@@ -129,7 +122,6 @@ export interface ArticleArtifact {
   kind: ArticleArtifactKind;
   contentHash?: string;
   titleHash?: string;
-  preferenceHash?: string;
   targetLanguage?: string;
   provider: 'ai' | 'google';
   model: string;
@@ -137,7 +129,7 @@ export interface ArticleArtifact {
   aiProviderName?: string;
   promptVersion: number;
   status: 'pending' | 'running' | 'partial' | 'completed' | 'failed';
-  data?: TitleTranslationData | BodyTranslationData | AttentionAnalysisData | PersonalRelevanceData;
+  data?: TitleTranslationData | BodyTranslationData | AttentionAnalysisData;
   generatedAt?: number;
   updatedAt: number;
   error?: string;
@@ -300,8 +292,6 @@ export interface Settings {
   aiAutoAnalyzeOnOpen: boolean;
   showAttentionHighlights: boolean;
   showArticleQuality: boolean;
-  showRecommendationReasons: boolean;
-  attentionTopics: string[];
   autoFetchFullContent: boolean;
   articleTitleLines: 1 | 2 | 3;
   articleExcerptLines: 1 | 2 | 3;

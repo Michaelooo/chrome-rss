@@ -2,7 +2,6 @@ import type {
   ArticleArtifact,
   AttentionAnalysisData,
   BodyTranslationData,
-  PersonalRelevanceData,
 } from '@/types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -124,28 +123,6 @@ export function validateAttentionAnalysis(
       priorityBlockIds: filterIds(readingGuide.priorityBlockIds),
       skippableBlockIds: filterIds(readingGuide.skippableBlockIds),
     },
-  };
-}
-
-export function validateRelevance(value: unknown, topics: string[]): PersonalRelevanceData {
-  if (!isRecord(value)) throw new Error('AI 推荐结果格式无效');
-  const relevanceValues = new Set(['high', 'medium', 'low', 'none']);
-  const relevance = typeof value.relevance === 'string' && relevanceValues.has(value.relevance)
-    ? value.relevance as PersonalRelevanceData['relevance']
-    : 'none';
-  const topicSet = new Set(topics);
-  return {
-    relevance,
-    matchedTopics: Array.isArray(value.matchedTopics)
-      ? value.matchedTopics.filter(
-          (topic): topic is string => typeof topic === 'string' && topicSet.has(topic)
-        )
-      : [],
-    recommendationReason: relevance === 'none'
-      ? ''
-      : typeof value.recommendationReason === 'string'
-        ? value.recommendationReason.trim()
-        : '',
   };
 }
 

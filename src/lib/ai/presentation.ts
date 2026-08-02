@@ -2,7 +2,6 @@ import type {
   ArticleArtifact,
   AttentionAnalysisData,
   BodyTranslationData,
-  PersonalRelevanceData,
   TitleTranslationData,
 } from '@/types';
 import { db } from '@/lib/storage/db';
@@ -10,7 +9,6 @@ import { db } from '@/lib/storage/db';
 export interface ArticlePresentation {
   title?: TitleTranslationData;
   attention?: AttentionAnalysisData;
-  relevance?: PersonalRelevanceData;
 }
 
 export async function getArticlePresentations(
@@ -37,8 +35,6 @@ export async function getArticlePresentations(
       titleSources.set(artifact.articleId, 'title');
     } else if (artifact.kind === 'attention-analysis') {
       current.attention = artifact.data as AttentionAnalysisData;
-    } else if (artifact.kind === 'personal-relevance') {
-      current.relevance = artifact.data as PersonalRelevanceData;
     }
     result.set(artifact.articleId, current);
   }

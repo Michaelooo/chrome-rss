@@ -3,18 +3,17 @@ import { db, getAllFeeds, getSettings, addDigest } from '../lib/storage/db';
 import { feedFetcher } from '../lib/fetcher/feed-fetcher';
 import { updateUnreadBadge } from '../lib/chrome/badge';
 import { getAIConfig, chatCompletion, createAICompletionSession, isArtifactFromConfiguredProvider } from '../lib/ai/client';
-import { buildSummarizePrompt, buildDigestPrompt, buildTitleTranslationPrompt, buildBodyTranslationPrompt, buildAttentionAnalysisPrompt, buildRelevancePrompt, parseJSONResponse } from '../lib/ai/prompts';
+import { buildSummarizePrompt, buildDigestPrompt, buildTitleTranslationPrompt, buildBodyTranslationPrompt, buildAttentionAnalysisPrompt, parseJSONResponse } from '../lib/ai/prompts';
 import type {
   ArticleArtifact,
   ArticleProcessingJob,
   ArticleSummary,
-  AttentionAnalysisData,
   BodyTranslationData,
   DigestItem,
   TitleTranslationData,
 } from '@/types';
 import { hashText } from '@/lib/content/article-document';
-import { validateAttentionAnalysis, validateBodyTranslation, validateRelevance, validateTitleTranslations } from '@/lib/ai/validation';
+import { validateAttentionAnalysis, validateBodyTranslation, validateTitleTranslations } from '@/lib/ai/validation';
 import type { ImageRefererRuleRequest } from '@/lib/chrome/image-referer';
 
 // Listen for extension installation
@@ -196,13 +195,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === 'ANALYZE_ATTENTION') {
     handleAnalyzeAttention(message.payload)
-      .then(artifact => sendResponse({ success: true, artifact }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-
-  if (message.type === 'ANALYZE_RELEVANCE') {
-    handleAnalyzeRelevance(message.payload)
       .then(artifact => sendResponse({ success: true, artifact }))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
@@ -896,45 +888,6 @@ async function handleAnalyzeAttention(payload: { articleId: string }): Promise<A
     articleId: payload.articleId,
     kind: 'attention-analysis',
     contentHash: document.contentHash,
-    provider: 'ai',
-    model: completion.provider.model,
-    aiProviderId: completion.provider.id,
-    aiProviderName: completion.provider.name,
-    promptVersion: AI_PROMPT_VERSION,
-    status: 'running',
-    updatedAt: now,
-  }, data);
-}
-
-async function handleAnalyzeRelevance(payload: {
-  articleId: string;
-  topics: string[];
-}): Promise<ArticleArtifact> {
-  const config = await getAIConfig();
-  if (!config) throw new Error('AI 未配置，请在设置中启用 AI 并填写 API Key');
-  const [article, document, attentionArtifact] = await Promise.all([
-    db.articles.get(payload.articleId),
-    db.articleDocuments.get(payload.articleId),
-    db.articleArtifacts.where('[articleId+kind]').equals([payload.articleId, 'attention-analysis']).first(),
-  ]);
-  if (!article || !document) throw new Error('文章正文尚未准备完成');
-  const attention = attentionArtifact?.data as AttentionAnalysisData | undefined;
-  const topics = payload.topics.map(topic => topic.trim()).filter(Boolean).slice(0, 20);
-  if (topics.length === 0) throw new Error('请先配置长期关注点');
-
-  const completion = await chatCompletion(
-    config,
-    buildRelevancePrompt(article.title, attention?.overview || '', attention?.tags || [], topics),
-    content => validateRelevance(parseJSONResponse<unknown>(content), topics)
-  );
-  const data = completion.value;
-  const now = Date.now();
-  return saveCompletedArtifact({
-    id: artifactId(payload.articleId, 'personal-relevance'),
-    articleId: payload.articleId,
-    kind: 'personal-relevance',
-    contentHash: document.contentHash,
-    preferenceHash: await hashText(topics.map(topic => topic.toLowerCase()).sort().join('\n')),
     provider: 'ai',
     model: completion.provider.model,
     aiProviderId: completion.provider.id,
