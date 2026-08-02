@@ -60,3 +60,6 @@ key.pem
 
 # Local setup notes (contains internal URLs, do not commit)
 LOCAL_SETUP.md
+
+# Local presentation files
+slides/
