@@ -87,10 +87,20 @@ function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
-async function requestProvider(provider: AIProviderConfig, messages: ChatMessage[], timeoutMs: number): Promise<string> {
+export interface AICompletionOptions {
+  signal?: AbortSignal;
+}
+
+async function requestProvider(provider: AIProviderConfig, messages: ChatMessage[], timeoutMs: number, options: AICompletionOptions = {}): Promise<string> {
   const url = `${provider.endpoint.replace(/\/+$/, '')}/chat/completions`;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const handleExternalAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', handleExternalAbort, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     let response: Response;
@@ -110,10 +120,14 @@ async function requestProvider(provider: AIProviderConfig, messages: ChatMessage
         signal: controller.signal,
       });
     } catch (error) {
-      const timedOut = controller.signal.aborted;
+      const cancelled = options.signal?.aborted && !timedOut;
       throw createRequestError(
-        timedOut ? `${provider.name} 请求超时` : `${provider.name} 网络请求失败`,
-        true
+        cancelled
+          ? `${provider.name} 请求已取消`
+          : timedOut
+            ? `${provider.name} 请求超时`
+            : `${provider.name} 网络请求失败`,
+        !cancelled
       );
     }
 
@@ -143,11 +157,12 @@ async function requestProvider(provider: AIProviderConfig, messages: ChatMessage
     return content;
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', handleExternalAbort);
   }
 }
 
 export interface AICompletionSession {
-  complete<T = string>(messages: ChatMessage[], validator?: AIContentValidator<T>): Promise<AICompletionResult<T>>;
+  complete<T = string>(messages: ChatMessage[], validator?: AIContentValidator<T>, options?: AICompletionOptions): Promise<AICompletionResult<T>>;
   getActiveProvider(): AIProviderConfig | undefined;
 }
 
@@ -160,7 +175,7 @@ export function createAICompletionSession(
     : undefined;
 
   return {
-    async complete<T = string>(messages: ChatMessage[], validator?: AIContentValidator<T>) {
+    async complete<T = string>(messages: ChatMessage[], validator?: AIContentValidator<T>, options: AICompletionOptions = {}) {
       const activeIndex = activeProviderId
         ? config.providers.findIndex(provider => provider.id === activeProviderId)
         : -1;
@@ -171,7 +186,7 @@ export function createAICompletionSession(
 
       for (const provider of ordered) {
         try {
-          const content = await requestProvider(provider, messages, config.timeoutMs);
+          const content = await requestProvider(provider, messages, config.timeoutMs, options);
           let value: T;
           try {
             value = validator ? validator(content) : content as T;
@@ -203,7 +218,8 @@ export function createAICompletionSession(
 export async function chatCompletion<T = string>(
   config: AIConfig,
   messages: ChatMessage[],
-  validator?: AIContentValidator<T>
+  validator?: AIContentValidator<T>,
+  options?: AICompletionOptions
 ): Promise<AICompletionResult<T>> {
-  return createAICompletionSession(config).complete(messages, validator);
+  return createAICompletionSession(config).complete(messages, validator, options);
 }

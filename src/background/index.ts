@@ -2,7 +2,7 @@
 import { db, getAllFeeds, getSettings, addDigest } from '../lib/storage/db';
 import { feedFetcher } from '../lib/fetcher/feed-fetcher';
 import { updateUnreadBadge } from '../lib/chrome/badge';
-import { getAIConfig, chatCompletion, createAICompletionSession, isArtifactFromConfiguredProvider } from '../lib/ai/client';
+import { getAIConfig, chatCompletion, createAICompletionSession, getConfiguredAIProviders, isArtifactFromConfiguredProvider } from '../lib/ai/client';
 import { buildSummarizePrompt, buildDigestPrompt, buildTitleTranslationPrompt, buildBodyTranslationPrompt, buildAttentionAnalysisPrompt, parseJSONResponse } from '../lib/ai/prompts';
 import type {
   ArticleArtifact,
@@ -14,6 +14,7 @@ import type {
 } from '@/types';
 import { hashText } from '@/lib/content/article-document';
 import { validateAttentionAnalysis, validateBodyTranslation, validateTitleTranslations } from '@/lib/ai/validation';
+import { buildBenchmarkMessages, evaluateBenchmarkContent, getBenchmarkSample } from '@/lib/ai/benchmark';
 import type { ImageRefererRuleRequest } from '@/lib/chrome/image-referer';
 
 // Listen for extension installation
@@ -133,6 +134,8 @@ async function showNotification(count: number) {
   });
 }
 
+const benchmarkControllers = new Map<string, AbortController>();
+
 // Listen for messages from popup/content scripts
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log('Message received:', message);
@@ -198,6 +201,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .then(artifact => sendResponse({ success: true, artifact }))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
+  }
+
+  if (message.type === 'RUN_AI_BENCHMARK_CASE') {
+    handleAIBenchmarkCase(message.payload)
+      .then(result => sendResponse({ success: true, result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'CANCEL_AI_BENCHMARK') {
+    benchmarkControllers.get(message.payload.runId)?.abort();
+    sendResponse({ success: true });
+    return false;
   }
 
   if (message.type === 'GENERATE_DIGEST') {
@@ -896,6 +912,47 @@ async function handleAnalyzeAttention(payload: { articleId: string }): Promise<A
     status: 'running',
     updatedAt: now,
   }, data);
+}
+
+async function handleAIBenchmarkCase(payload: {
+  runId: string;
+  providerId: string;
+  task: 'summary' | 'translation';
+  sampleId: string;
+  attempt: number;
+}) {
+  if (!payload.runId || !payload.providerId || !getBenchmarkSample(payload.task, payload.sampleId)) {
+    throw new Error('基准测试参数无效');
+  }
+  if (benchmarkControllers.has(payload.runId)) throw new Error('已有基准测试请求正在执行');
+
+  const settings = await getSettings();
+  const provider = getConfiguredAIProviders(settings).find(item => item.id === payload.providerId);
+  if (!provider) throw new Error('服务商未保存或未启用');
+
+  const controller = new AbortController();
+  benchmarkControllers.set(payload.runId, controller);
+  const startedAt = performance.now();
+  try {
+    const completion = await chatCompletion(
+      { providers: [provider], timeoutMs: 60_000 },
+      buildBenchmarkMessages(payload.task, payload.sampleId),
+      undefined,
+      { signal: controller.signal }
+    );
+    return evaluateBenchmarkContent(
+      provider,
+      payload.task,
+      payload.sampleId,
+      payload.attempt,
+      Math.round(performance.now() - startedAt),
+      completion.content
+    );
+  } finally {
+    if (benchmarkControllers.get(payload.runId) === controller) {
+      benchmarkControllers.delete(payload.runId);
+    }
+  }
 }
 
 async function handleSummarizeArticle(payload: { articleId: string }) {

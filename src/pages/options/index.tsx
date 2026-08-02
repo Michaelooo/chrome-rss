@@ -3,20 +3,60 @@ import ReactDOM from 'react-dom/client';
 import { useTranslation } from 'react-i18next';
 import { getSettings, updateSettings } from '@/lib/storage/db';
 import type { AIProviderSettings, Settings } from '@/types';
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import type { AIBenchmarkCaseResponse, AIBenchmarkCaseResult, AIBenchmarkTask } from '@/types/messages';
+import { median, SUMMARY_BENCHMARK_SAMPLES, TRANSLATION_BENCHMARK_SAMPLES } from '@/lib/ai/benchmark';
+import { swapPrimaryWithFallback } from '@/lib/ai/providers';
+import { ArrowDown, ArrowUp, BookOpen, Languages, Plus, Rss, Settings as SettingsIcon, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import i18n, { setStoredLanguage, type AppLanguage } from '@/lib/i18n';
 import '@/index.css';
 
+type SettingsSection = 'general' | 'feeds-storage' | 'reading' | 'translation' | 'ai-services';
+
+const SETTINGS_SECTIONS = [
+  { id: 'general' as const, label: '通用', description: '语言、主题与通知', icon: SettingsIcon },
+  { id: 'feeds-storage' as const, label: '订阅与存储', description: '更新、全文与文章保留', icon: Rss },
+  { id: 'reading' as const, label: '阅读体验', description: '阅读行为与显示样式', icon: BookOpen },
+  { id: 'translation' as const, label: '翻译与洞察', description: '翻译、重点与质量提示', icon: Languages },
+  { id: 'ai-services' as const, label: 'AI 服务', description: '模型、备用服务与评测', icon: Sparkles },
+];
+
+const HASH_TO_SECTION: Record<string, SettingsSection> = {
+  '#general': 'general',
+  '#feeds-storage': 'feeds-storage',
+  '#reading': 'reading',
+  '#translation': 'translation',
+  '#translation-settings': 'translation',
+  '#ai-services': 'ai-services',
+};
+
 const Options: React.FC = () => {
   const { t } = useTranslation();
+  const [activeSection, setActiveSection] = useState<SettingsSection>(() => HASH_TO_SECTION[window.location.hash] || 'general');
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [benchmarkMode, setBenchmarkMode] = useState<'quick' | 'standard'>('quick');
+  const [benchmarkRunning, setBenchmarkRunning] = useState(false);
+  const [benchmarkCancelled, setBenchmarkCancelled] = useState(false);
+  const [providerSwitching, setProviderSwitching] = useState(false);
+  const [benchmarkResults, setBenchmarkResults] = useState<AIBenchmarkCaseResult[]>([]);
+  const [benchmarkErrors, setBenchmarkErrors] = useState<Record<string, string>>({});
+  const benchmarkCancelRef = React.useRef(false);
+  const benchmarkRunIdRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     loadSettings();
+  }, []);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setActiveSection(HASH_TO_SECTION[window.location.hash] || 'general');
+    };
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
   const loadSettings = async () => {
@@ -66,6 +106,103 @@ const Options: React.FC = () => {
     setSettings({ ...settings, aiFallbackProviders: providers });
   };
 
+  const benchmarkProviders = settings ? [
+    {
+      id: settings.aiPrimaryProviderId || 'primary',
+      name: settings.aiPrimaryProviderName || '主服务商',
+      model: settings.aiModel,
+    },
+    ...settings.aiFallbackProviders
+      .filter(provider => provider.enabled && provider.name && provider.endpoint && provider.apiKey && provider.model)
+      .map(provider => ({ id: provider.id, name: provider.name, model: provider.model })),
+  ] : [];
+
+  const runBenchmark = async () => {
+    if (!settings || benchmarkRunning) return;
+    await updateSettings(settings);
+    const runId = crypto.randomUUID();
+    benchmarkRunIdRef.current = runId;
+    const attempts = benchmarkMode === 'quick' ? 1 : 3;
+    const tasks: Array<{ task: AIBenchmarkTask; sampleId: string; attempt: number }> = [];
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      tasks.push({ task: 'summary', sampleId: SUMMARY_BENCHMARK_SAMPLES[attempt % SUMMARY_BENCHMARK_SAMPLES.length].id, attempt: attempt + 1 });
+      tasks.push({ task: 'translation', sampleId: TRANSLATION_BENCHMARK_SAMPLES[attempt % TRANSLATION_BENCHMARK_SAMPLES.length].id, attempt: attempt + 1 });
+    }
+
+    setBenchmarkResults([]);
+    setBenchmarkErrors({});
+    setBenchmarkCancelled(false);
+    benchmarkCancelRef.current = false;
+    setBenchmarkRunning(true);
+    let lastStartedAt = 0;
+    try {
+      for (const provider of benchmarkProviders) {
+        for (const item of tasks) {
+          if (benchmarkCancelRef.current) return;
+          const waitMs = Math.max(0, 3000 - (Date.now() - lastStartedAt));
+          if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+          if (benchmarkCancelRef.current) return;
+          lastStartedAt = Date.now();
+          const response = await chrome.runtime.sendMessage({
+            type: 'RUN_AI_BENCHMARK_CASE',
+            payload: { runId, providerId: provider.id, ...item },
+          }) as AIBenchmarkCaseResponse;
+          if (response.success && response.result) {
+            setBenchmarkResults(previous => [...previous, response.result!]);
+          } else {
+            setBenchmarkErrors(previous => ({
+              ...previous,
+              [`${provider.id}-${item.task}-${item.attempt}`]: response.error || '测试失败',
+            }));
+          }
+        }
+      }
+    } finally {
+      benchmarkRunIdRef.current = null;
+      setBenchmarkRunning(false);
+    }
+  };
+
+  const cancelBenchmark = async () => {
+    benchmarkCancelRef.current = true;
+    setBenchmarkCancelled(true);
+    if (benchmarkRunIdRef.current) {
+      await chrome.runtime.sendMessage({
+        type: 'CANCEL_AI_BENCHMARK',
+        payload: { runId: benchmarkRunIdRef.current },
+      });
+    }
+    setBenchmarkRunning(false);
+  };
+
+  const providerBenchmarkResults = (providerId: string) => benchmarkResults.filter(result => result.providerId === providerId);
+
+  const handleSetPrimaryProvider = async (providerId: string) => {
+    if (!settings || benchmarkRunning || providerSwitching) return;
+    const nextSettings = swapPrimaryWithFallback(settings, providerId);
+    if (nextSettings === settings) return;
+
+    setProviderSwitching(true);
+    setSaveError(null);
+    setSettings(nextSettings);
+    try {
+      await updateSettings(nextSettings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '切换主服务商失败');
+      await loadSettings();
+    } finally {
+      setProviderSwitching(false);
+    }
+  };
+
+  const selectSection = (section: SettingsSection) => {
+    setActiveSection(section);
+    window.location.hash = section;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSave = async () => {
     if (!settings) return;
     setSaveError(null);
@@ -100,14 +237,62 @@ const Options: React.FC = () => {
     return <div className="p-8">{t('common.loading')}</div>;
   }
 
+  const currentSection = SETTINGS_SECTIONS.find(section => section.id === activeSection) || SETTINGS_SECTIONS[0];
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">
+    <div className="min-h-screen bg-gray-50 px-4 py-6 dark:bg-gray-950 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <h1 className="mb-6 text-3xl font-bold text-gray-900 dark:text-gray-100">
           {t('settings.title')}
         </h1>
 
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow p-6 space-y-6">
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-2 lg:hidden">
+          {SETTINGS_SECTIONS.map(section => {
+            const Icon = section.icon;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => selectSection(section.id)}
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${activeSection === section.id ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 dark:bg-gray-900 dark:text-gray-300'}`}
+              >
+                <Icon className="h-4 w-4" />
+                {section.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <nav className="hidden self-start rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-gray-900 lg:sticky lg:top-6 lg:block">
+            {SETTINGS_SECTIONS.map(section => {
+              const Icon = section.icon;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => selectSection(section.id)}
+                  className={`mb-1 flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left ${activeSection === section.id ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}
+                >
+                  <Icon className="mt-0.5 h-5 w-5 shrink-0" />
+                  <span>
+                    <span className="block text-sm font-medium">{section.label}</span>
+                    <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">{section.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="min-w-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-6">
+              <div className="mb-6 border-b border-gray-200 pb-4 dark:border-gray-800">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{currentSection.label}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{currentSection.description}</p>
+              </div>
+              <div className="space-y-6">
+          {activeSection === 'general' && (
+            <>
           {/* Language */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -145,6 +330,11 @@ const Options: React.FC = () => {
               <option value="auto">{t('settings.themeAuto')}</option>
             </select>
           </div>
+            </>
+          )}
+
+          {activeSection === 'feeds-storage' && (
+            <>
 
           {/* Update Interval */}
           <div>
@@ -163,22 +353,27 @@ const Options: React.FC = () => {
               }
             />
           </div>
+            </>
+          )}
 
-          {/* Notifications */}
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('settings.enableNotifications')}
-            </label>
-            <input
-              type="checkbox"
-              checked={settings.enableNotifications}
-              onChange={(e) =>
-                setSettings({ ...settings, enableNotifications: e.target.checked })
-              }
-              className="w-4 h-4"
-            />
-          </div>
+          {activeSection === 'general' && (
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('settings.enableNotifications')}
+              </label>
+              <input
+                type="checkbox"
+                checked={settings.enableNotifications}
+                onChange={(e) =>
+                  setSettings({ ...settings, enableNotifications: e.target.checked })
+                }
+                className="w-4 h-4"
+              />
+            </div>
+          )}
 
+          {activeSection === 'feeds-storage' && (
+            <>
           {/* Auto Fetch Full Content */}
           <div className="flex items-center justify-between">
             <div>
@@ -259,9 +454,12 @@ const Options: React.FC = () => {
               {t('settings.defaultArticleFilterDesc')}
             </p>
           </div>
+            </>
+          )}
 
-          {/* Reading Style */}
-          <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+          {activeSection === 'reading' && (
+          /* Reading Style */
+          <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
               {t('settings.readingStyle')}
             </h2>
@@ -388,9 +586,11 @@ const Options: React.FC = () => {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Translation */}
-          <div id="translation-settings" className="scroll-mt-6 border-t border-gray-200 dark:border-gray-800 pt-6">
+          {activeSection === 'translation' && (
+          /* Translation */
+          <div id="translation-settings">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -506,9 +706,11 @@ const Options: React.FC = () => {
               </div>
             )}
           </div>
+          )}
 
-          {/* AI Summary */}
-          <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+          {activeSection === 'ai-services' && (
+          /* AI Summary */
+          <div>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">AI 摘要</h2>
@@ -662,6 +864,88 @@ const Options: React.FC = () => {
                   ))}
                 </div>
 
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4">
+                  <div>
+                    <h3 className="font-medium text-gray-900 dark:text-gray-100">服务商基准测试</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      使用固定样本分别测试摘要与翻译。请求逐个执行且至少间隔 3 秒，结果不会保存。
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <select
+                      value={benchmarkMode}
+                      onChange={(event) => setBenchmarkMode(event.target.value as 'quick' | 'standard')}
+                      disabled={benchmarkRunning}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+                    >
+                      <option value="quick">快速：每个服务商 2 次请求</option>
+                      <option value="standard">标准：每个服务商 6 次请求</option>
+                    </select>
+                    <Button onClick={() => void runBenchmark()} disabled={benchmarkRunning || benchmarkProviders.length === 0}>
+                      {benchmarkRunning ? '测试中...' : '开始测试'}
+                    </Button>
+                    {benchmarkRunning && (
+                      <Button variant="outline" onClick={() => void cancelBenchmark()}>取消</Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    固定样本分数只检查 JSON、字段完整度、事实锚点及术语保留；请结合输出预览判断表达质量。
+                  </p>
+                  {benchmarkCancelled && (
+                    <p className="text-sm text-amber-600 dark:text-amber-400">测试已取消，已完成结果仍保留。</p>
+                  )}
+                  <div className="space-y-3">
+                    {benchmarkProviders.map(provider => {
+                      const results = providerBenchmarkResults(provider.id);
+                      const latencies = results.map(result => result.latencyMs);
+                      const summaryResults = results.filter(result => result.task === 'summary');
+                      const translationResults = results.filter(result => result.task === 'translation');
+                      const average = (values: number[]) => values.length
+                        ? Math.round(values.reduce((total, value) => total + value, 0) / values.length)
+                        : 0;
+                      return (
+                        <div key={provider.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-700">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{provider.name} · {provider.model}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs text-gray-500">完成 {results.length} 项</div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={benchmarkRunning || providerSwitching || provider.id === settings.aiPrimaryProviderId}
+                                onClick={() => void handleSetPrimaryProvider(provider.id)}
+                              >
+                                {provider.id === settings.aiPrimaryProviderId ? '当前主服务商' : '设为主服务商'}
+                              </Button>
+                            </div>
+                          </div>
+                          {results.length > 0 && (
+                            <div className="mt-2 grid gap-2 text-sm text-gray-600 dark:text-gray-300 sm:grid-cols-2">
+                              <div>耗时中位数：{(median(latencies) / 1000).toFixed(2)}s</div>
+                              <div>范围：{(Math.min(...latencies) / 1000).toFixed(2)}–{(Math.max(...latencies) / 1000).toFixed(2)}s</div>
+                              <div>摘要固定样本：{average(summaryResults.map(result => result.qualityScore))} 分</div>
+                              <div>翻译固定样本：{average(translationResults.map(result => result.qualityScore))} 分</div>
+                              <div>结构完整度：{average(results.map(result => result.structureScore))}%</div>
+                              <div>严格 JSON：{results.filter(result => result.strictJsonPass).length}/{results.length}</div>
+                            </div>
+                          )}
+                          {results.map(result => (
+                            <details key={`${result.task}-${result.attempt}`} className="mt-2 text-xs">
+                              <summary className="cursor-pointer text-gray-500">
+                                {result.task === 'summary' ? '摘要' : '翻译'} #{result.attempt} · {(result.latencyMs / 1000).toFixed(2)}s · 质量 {result.qualityScore}
+                              </summary>
+                              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-gray-50 p-2 text-gray-700 dark:bg-gray-800 dark:text-gray-300">{result.preview}</pre>
+                            </details>
+                          ))}
+                          {Object.entries(benchmarkErrors)
+                            .filter(([key]) => key.startsWith(`${provider.id}-`))
+                            .map(([key, error]) => <p key={key} className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">获取新文章时自动生成摘要</label>
                   <input
@@ -678,15 +962,20 @@ const Options: React.FC = () => {
               </div>
             )}
           </div>
+          )}
+              </div>
+            </div>
 
-          {/* Save Button */}
-          <div className="pt-4">
-            {saveError && (
-              <p className="mb-3 text-sm text-red-600 dark:text-red-400">{saveError}</p>
-            )}
-            <Button onClick={handleSave} className="w-full">
-              {saved ? t('common.saved') : t('common.save')}
-            </Button>
+            <div className="sticky bottom-0 z-20 mt-4 rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+              {saveError && (
+                <p className="mb-3 text-sm text-red-600 dark:text-red-400">{saveError}</p>
+              )}
+              <div className="flex justify-end">
+                <Button onClick={handleSave} className="w-full sm:w-auto sm:min-w-40">
+                  {saved ? t('common.saved') : t('common.save')}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
