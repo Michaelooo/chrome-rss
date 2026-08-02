@@ -60,10 +60,12 @@
 pnpm install
 ```
 
-2. 开发模式（支持热更新）：
+2. 开发模式（基于 `@crxjs/vite-plugin` 的热更新）：
 ```bash
 pnpm dev
 ```
+   - React 页面（main / popup / options）支持模块热替换（HMR），状态保留
+   - 修改 Service Worker 或 `manifest.json` 时扩展会自动 reload，无需手动刷新
 
 3. 构建生产版本：
 ```bash
@@ -72,10 +74,15 @@ pnpm build
 
 ### 加载到 Chrome
 
+#### 开发模式
+1. 运行 `pnpm dev`，等待首次写入 `dist/`
+2. 打开 `chrome://extensions/`，开启"开发者模式"
+3. 点击"加载已解压的扩展程序"，选择 `dist/` 目录（只需加载一次）
+4. 之后改代码会自动同步到扩展，无需重复加载
+
+#### 生产模式
 1. 构建项目：`pnpm build`
-2. 打开 `chrome://extensions/`
-3. 开启"开发者模式"
-4. 点击"加载已解压的扩展程序"，选择 `dist/` 目录
+2. 在 `chrome://extensions/` 中加载 `dist/` 目录
 
 ## 使用指南
 
