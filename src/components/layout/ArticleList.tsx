@@ -11,6 +11,8 @@ import {
   bulkUpdateArticlesReadStatus,
 } from '@/lib/storage/db';
 import type { Article } from '@/types';
+import type { ArticlePresentation } from '@/lib/ai/presentation';
+import { getArticlePresentations } from '@/lib/ai/presentation';
 import { cn, formatRelativeTime, stripHtml, truncateText } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { updateUnreadBadge } from '@/lib/chrome/badge';
@@ -22,6 +24,9 @@ export const ArticleList: React.FC = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(false);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [presentations, setPresentations] = useState<Map<string, ArticlePresentation>>(new Map());
+  const attemptedTitleTranslationsRef = useRef<Set<string>>(new Set());
+  const titleTranslationInFlightRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -70,6 +75,44 @@ export const ArticleList: React.FC = () => {
     uiState.searchQuery,
     feedIdentityKey,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getArticlePresentations(articles.map(article => article.id))
+      .then(result => {
+        if (!cancelled) setPresentations(result);
+      })
+      .catch(error => console.error('Failed to load article AI presentation:', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [articles]);
+
+  useEffect(() => {
+    if (!settings?.aiAutoTranslateTitles || !settings.enableAI || articles.length === 0) return;
+    if (titleTranslationInFlightRef.current) return;
+    const candidates = articles
+      .filter(article =>
+        !presentations.get(article.id)?.title &&
+        !attemptedTitleTranslationsRef.current.has(article.id) &&
+        /[A-Za-z]{4}/.test(article.title) &&
+        !/[㐀-鿿]/.test(article.title)
+      )
+      .slice(0, settings.aiTitleTranslationBatchLimit || 40)
+      .map(article => ({ articleId: article.id, title: article.title }));
+    if (candidates.length === 0) return;
+    candidates.forEach(article => attemptedTitleTranslationsRef.current.add(article.articleId));
+    titleTranslationInFlightRef.current = true;
+    chrome.runtime.sendMessage({
+      type: 'TRANSLATE_TITLES_AI',
+      payload: { articles: candidates, targetLanguage: settings.translationTargetLanguage || 'zh-CN' },
+    }).then(() => getArticlePresentations(articles.map(article => article.id)))
+      .then(setPresentations)
+      .catch(error => console.error('Failed to auto-translate titles:', error))
+      .finally(() => {
+        titleTranslationInFlightRef.current = false;
+      });
+  }, [articles, presentations, settings?.aiAutoTranslateTitles, settings?.enableAI, settings?.aiTitleTranslationBatchLimit, settings?.translationTargetLanguage]);
 
   useEffect(() => {
     const unsubscribe = subscribeArticleUpdated(({ id, updates }) => {
@@ -483,6 +526,7 @@ export const ArticleList: React.FC = () => {
             getThreshold={() => headerRef.current?.getBoundingClientRect().bottom ?? 0}
             titleLines={settings?.articleTitleLines ?? 1}
             excerptLines={settings?.articleExcerptLines ?? 2}
+            presentation={presentations.get(article.id)}
           />
         )}
       />
@@ -502,6 +546,7 @@ interface ArticleItemProps {
   getThreshold: () => number;
   titleLines: 1 | 2 | 3;
   excerptLines: 1 | 2 | 3;
+  presentation?: ArticlePresentation;
 }
 
 const ArticleItem: React.FC<ArticleItemProps> = ({
@@ -516,6 +561,7 @@ const ArticleItem: React.FC<ArticleItemProps> = ({
   getThreshold,
   titleLines,
   excerptLines,
+  presentation,
 }) => {
   const itemRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedRef = useRef(false);
@@ -587,10 +633,16 @@ const ArticleItem: React.FC<ArticleItemProps> = ({
             {!article.isRead && (
               <Circle className="w-2 h-2 fill-primary-600 text-primary-600 flex-shrink-0" />
             )}
-            <h3 className={cn('text-sm text-gray-900 dark:text-gray-100', titleClass)}>
-              {article.title}
+            <h3 className={cn('text-sm text-gray-900 dark:text-gray-100', titleClass)} title={presentation?.title?.originalTitle}>
+              {presentation?.title?.translatedTitle || article.title}
             </h3>
           </div>
+
+          {presentation?.relevance?.recommendationReason && (
+            <p className="mb-2 line-clamp-1 text-[11px] text-amber-700 dark:text-amber-300">
+              推荐：{presentation.relevance.recommendationReason}
+            </p>
+          )}
 
           <p className={cn('text-xs text-gray-600 dark:text-gray-400 mb-2', excerptClass)}>
             {excerpt}

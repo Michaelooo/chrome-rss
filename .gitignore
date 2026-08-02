@@ -55,5 +55,8 @@ coverage/
 # Chrome extension private key (keep key.pem local, do not commit)
 key.pem
 
+# Claude Code temporary worktrees
+.claude/worktrees/
+
 # Local setup notes (contains internal URLs, do not commit)
 LOCAL_SETUP.md

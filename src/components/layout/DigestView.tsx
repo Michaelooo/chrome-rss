@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store';
-import { getDigestByDate } from '@/lib/storage/db';
+import { getDigestByDate, db } from '@/lib/storage/db';
 import { generateDigest } from '@/lib/ai';
 import { cn } from '@/lib/utils';
-import type { Digest } from '@/types';
+import type { Digest, PersonalRelevanceData, TitleTranslationData } from '@/types';
 
 export const DigestView: React.FC = () => {
   const { setUIState } = useAppStore();
@@ -13,6 +13,7 @@ export const DigestView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [articlePresentation, setArticlePresentation] = useState<Record<string, { title?: string; reason?: string }>>({});
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -20,11 +21,36 @@ export const DigestView: React.FC = () => {
     loadDigest();
   }, []);
 
+  const loadArticlePresentation = async (articleIds: string[]) => {
+    if (articleIds.length === 0) {
+      setArticlePresentation({});
+      return;
+    }
+    const artifacts = await db.articleArtifacts
+      .where('articleId')
+      .anyOf(articleIds)
+      .toArray();
+    const presentation: Record<string, { title?: string; reason?: string }> = {};
+    artifacts.forEach(artifact => {
+      if (artifact.status !== 'completed') return;
+      const current = presentation[artifact.articleId] || {};
+      if (artifact.kind === 'title-translation') {
+        current.title = (artifact.data as TitleTranslationData | undefined)?.translatedTitle;
+      }
+      if (artifact.kind === 'personal-relevance') {
+        current.reason = (artifact.data as PersonalRelevanceData | undefined)?.recommendationReason;
+      }
+      presentation[artifact.articleId] = current;
+    });
+    setArticlePresentation(presentation);
+  };
+
   const loadDigest = async () => {
     setLoading(true);
     try {
       const d = await getDigestByDate(today);
       setDigest(d);
+      await loadArticlePresentation(d?.items.map(item => item.articleId) || []);
     } catch (err) {
       console.error('Failed to load digest:', err);
     } finally {
@@ -38,6 +64,7 @@ export const DigestView: React.FC = () => {
     try {
       const d = await generateDigest();
       setDigest(d);
+      await loadArticlePresentation(d.items.map(item => item.articleId));
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成简报失败');
     } finally {
@@ -104,10 +131,15 @@ export const DigestView: React.FC = () => {
                     className="text-left w-full"
                   >
                     <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400">
-                      {item.title}
+                      {articlePresentation[item.articleId]?.title || item.title}
                     </h3>
                   </button>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{item.summary}</p>
+                  {articlePresentation[item.articleId]?.reason && (
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                      为什么推荐：{articlePresentation[item.articleId].reason}
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                     <span>{item.feedTitle}</span>
                     <a
