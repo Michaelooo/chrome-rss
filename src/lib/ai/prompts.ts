@@ -125,20 +125,6 @@ export function buildAttentionAnalysisPrompt(
   ];
 }
 
-export function buildRelevancePrompt(
-  title: string,
-  overview: string,
-  tags: string[],
-  topics: string[]
-): ChatMessage[] {
-  return [
-    {
-      role: 'system',
-      content: '根据用户明确提供的长期关注点判断文章相关性。只返回 JSON：{"relevance":"high|medium|low|none","matchedTopics":[],"recommendationReason":"一句具体理由"}。没有匹配时不要编造理由。',
-    },
-    { role: 'user', content: JSON.stringify({ title, overview, tags, topics }) },
-  ];
-}
 
 export function parseJSONResponse<T>(raw: string): T {
   // Strip markdown code fences if present

@@ -4,13 +4,11 @@ import type {
   AttentionAnalysisData,
   BodyTranslationData,
   Digest,
-  PersonalRelevanceData,
   TitleTranslationData,
 } from '@/types';
 import type {
   AttentionAnalysisResponse,
   BodyTranslationResponse,
-  RelevanceResponse,
   TitleTranslationResponse,
 } from '@/types/messages';
 
@@ -80,18 +78,6 @@ export async function analyzeArticleAttention(payload: {
     payload,
   });
   if (!response.artifact) throw new Error('阅读分析结果为空');
-  return response.artifact;
-}
-
-export async function analyzeArticleRelevance(payload: {
-  articleId: string;
-  topics: string[];
-}): Promise<ArticleArtifact & { data?: PersonalRelevanceData }> {
-  const response = await sendAIMessage<RelevanceResponse>({
-    type: 'ANALYZE_RELEVANCE',
-    payload,
-  });
-  if (!response.artifact) throw new Error('推荐分析结果为空');
   return response.artifact;
 }
 

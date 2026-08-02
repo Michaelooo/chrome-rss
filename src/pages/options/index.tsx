@@ -494,22 +494,9 @@ const Options: React.FC = () => {
                   <Input type="number" min="1" max="40" value={settings.aiTitleTranslationBatchLimit} onChange={(e) => setSettings({ ...settings, aiTitleTranslationBatchLimit: Math.max(1, Math.min(40, Number(e.target.value) || 40)) })} />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">长期关注点</label>
-                  <textarea
-                    value={settings.attentionTopics.join('\n')}
-                    onChange={(e) => setSettings({ ...settings, attentionTopics: e.target.value.split('\n').map(item => item.trim()).filter(Boolean).slice(0, 20) })}
-                    rows={5}
-                    placeholder={'每行一个关注问题，例如：\nAI Coding 如何提升真实开发效率\n个人开发者如何验证产品需求'}
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-                  />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">最多 20 项。生成个性化推荐时会发送给你配置的 AI 接口。</p>
-                </div>
-
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input type="checkbox" checked={settings.showAttentionHighlights} onChange={(e) => setSettings({ ...settings, showAttentionHighlights: e.target.checked })} />显示 AI 重点高亮</label>
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input type="checkbox" checked={settings.showArticleQuality} onChange={(e) => setSettings({ ...settings, showArticleQuality: e.target.checked })} />显示文章质量依据</label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input type="checkbox" checked={settings.showRecommendationReasons} onChange={(e) => setSettings({ ...settings, showRecommendationReasons: e.target.checked })} />显示个性化推荐理由</label>
                   <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input type="checkbox" checked={settings.aiAutoAnalyzeOnOpen} onChange={(e) => setSettings({ ...settings, aiAutoAnalyzeOnOpen: e.target.checked })} />打开文章时自动分析</label>
                 </div>
 

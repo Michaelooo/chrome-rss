@@ -5,7 +5,7 @@ import { useAppStore } from '@/store';
 import { getDigestByDate, db } from '@/lib/storage/db';
 import { generateDigest } from '@/lib/ai';
 import { cn } from '@/lib/utils';
-import type { Digest, PersonalRelevanceData, TitleTranslationData } from '@/types';
+import type { Digest, TitleTranslationData } from '@/types';
 
 export const DigestView: React.FC = () => {
   const { setUIState } = useAppStore();
@@ -13,7 +13,7 @@ export const DigestView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [articlePresentation, setArticlePresentation] = useState<Record<string, { title?: string; reason?: string }>>({});
+  const [articlePresentation, setArticlePresentation] = useState<Record<string, { title?: string }>>({});
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -30,15 +30,12 @@ export const DigestView: React.FC = () => {
       .where('articleId')
       .anyOf(articleIds)
       .toArray();
-    const presentation: Record<string, { title?: string; reason?: string }> = {};
+    const presentation: Record<string, { title?: string }> = {};
     artifacts.forEach(artifact => {
       if (artifact.status !== 'completed') return;
       const current = presentation[artifact.articleId] || {};
       if (artifact.kind === 'title-translation') {
         current.title = (artifact.data as TitleTranslationData | undefined)?.translatedTitle;
-      }
-      if (artifact.kind === 'personal-relevance') {
-        current.reason = (artifact.data as PersonalRelevanceData | undefined)?.recommendationReason;
       }
       presentation[artifact.articleId] = current;
     });
@@ -135,11 +132,6 @@ export const DigestView: React.FC = () => {
                     </h3>
                   </button>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{item.summary}</p>
-                  {articlePresentation[item.articleId]?.reason && (
-                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                      为什么推荐：{articlePresentation[item.articleId].reason}
-                    </p>
-                  )}
                   <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                     <span>{item.feedTitle}</span>
                     <a

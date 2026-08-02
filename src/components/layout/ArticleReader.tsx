@@ -13,7 +13,6 @@ import type {
   ArticleDocument,
   AttentionAnalysisData,
   BodyTranslationData,
-  PersonalRelevanceData,
   TitleTranslationData,
 } from '@/types';
 import { enableImageReferer } from '@/lib/chrome/image-referer';
@@ -52,7 +51,6 @@ import { translateArticleWithGoogle } from '@/lib/translation';
 import { buildArticleDocument, buildTranslatedDocumentHtml, hashText } from '@/lib/content/article-document';
 import { getConfiguredAIProviders, isArtifactFromConfiguredProvider } from '@/lib/ai/client';
 import {
-  analyzeArticleRelevance,
   summarizeArticle,
   translateArticleBodyWithAI,
 } from '@/lib/ai';
@@ -214,8 +212,6 @@ export const ArticleReader: React.FC = () => {
   const [articleDocument, setArticleDocument] = useState<ArticleDocument | null>(null);
   const [artifacts, setArtifacts] = useState<ArticleArtifact[]>([]);
   const [translationView, setTranslationView] = useState<'original' | 'translated' | 'bilingual'>('original');
-  const [isProcessingAI, setIsProcessingAI] = useState(false);
-  const [aiError, setAIError] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, string>>({});
   const imageRefererRetriesRef = useRef<Set<string>>(new Set());
   const contentRef = useRef<HTMLElement | null>(null);
@@ -233,7 +229,6 @@ export const ArticleReader: React.FC = () => {
     setArticleDocument(null);
     setArtifacts([]);
     setTranslationView(settings?.defaultTranslationView ?? 'original');
-    setAIError(null);
     setFailedImages({});
     imageRefererRetriesRef.current.clear();
   }, [uiState.selectedArticleId]);
@@ -270,9 +265,6 @@ export const ArticleReader: React.FC = () => {
     }
     const titleHash = await hashText(loadedArticle.title.trim());
     const targetLanguage = settings?.translationTargetLanguage?.trim() || 'zh-CN';
-    const preferenceHash = settings?.attentionTopics?.length
-      ? await hashText(settings.attentionTopics.map(topic => topic.toLowerCase()).sort().join('\n'))
-      : undefined;
     const validArtifacts = storedArtifacts.filter(artifact => {
       if (artifact.kind === 'title-translation') {
         return artifact.titleHash === titleHash && artifact.targetLanguage === targetLanguage;
@@ -290,9 +282,6 @@ export const ArticleReader: React.FC = () => {
           artifact.targetLanguage === targetLanguage &&
           artifact.provider === provider &&
           modelMatches;
-      }
-      if (artifact.kind === 'personal-relevance') {
-        return !!preferenceHash && artifact.preferenceHash === preferenceHash;
       }
       return true;
     });
@@ -518,14 +507,9 @@ export const ArticleReader: React.FC = () => {
     () => artifacts.find(item => item.kind === 'attention-analysis' && item.status === 'completed'),
     [artifacts]
   );
-  const relevanceArtifact = useMemo(
-    () => artifacts.find(item => item.kind === 'personal-relevance' && item.status === 'completed'),
-    [artifacts]
-  );
   const titleTranslation = titleTranslationArtifact?.data as TitleTranslationData | undefined;
   const bodyTranslation = bodyTranslationArtifact?.data as BodyTranslationData | undefined;
   const attentionAnalysis = attentionArtifact?.data as AttentionAnalysisData | undefined;
-  const personalRelevance = relevanceArtifact?.data as PersonalRelevanceData | undefined;
   const translatedTitle = bodyTranslation?.translatedTitle || titleTranslation?.translatedTitle;
   const displayedTitle = translationView === 'original'
     ? article?.title
@@ -536,18 +520,6 @@ export const ArticleReader: React.FC = () => {
       ...previous.filter(item => item.kind !== artifact.kind),
       artifact,
     ]);
-  };
-
-  const runAIAction = async (action: () => Promise<ArticleArtifact>) => {
-    setIsProcessingAI(true);
-    setAIError(null);
-    try {
-      updateArtifact(await action());
-    } catch (error) {
-      setAIError(error instanceof Error ? error.message : 'AI 处理失败');
-    } finally {
-      setIsProcessingAI(false);
-    }
   };
 
   const handleTranslateFullArticle = async (force = false) => {
@@ -587,14 +559,6 @@ export const ArticleReader: React.FC = () => {
     void handleTranslateFullArticle();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [article?.id, articleDocument?.contentHash, settings?.translationAutoFetch, bodyTranslation]);
-
-  const handleRelevanceAnalysis = () => {
-    if (!article || !settings?.attentionTopics?.length) return;
-    void runAIAction(() => analyzeArticleRelevance({
-      articleId: article.id,
-      topics: settings.attentionTopics,
-    }));
-  };
 
   useEffect(() => {
     if (!article || !articleDocument || !settings?.enableAI || !settings.aiAutoAnalyzeOnOpen) return;
@@ -744,11 +708,6 @@ export const ArticleReader: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {settings?.enableAI && settings.attentionTopics.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={handleRelevanceAnalysis} disabled={isProcessingAI}>
-                  {personalRelevance ? '更新推荐理由' : '与我相关'}
-                </Button>
-              )}
               {!settings?.enableTranslation && (
                 <Button
                   variant="ghost"
@@ -933,12 +892,6 @@ export const ArticleReader: React.FC = () => {
             </div>
           )}
 
-          {aiError && (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
-              {aiError}
-            </div>
-          )}
-
           {articleDocument && (
             <div className="mb-4 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
               <span className="rounded-full bg-gray-100 px-2 py-1 dark:bg-gray-800">
@@ -950,17 +903,6 @@ export const ArticleReader: React.FC = () => {
               <span className="rounded-full bg-gray-100 px-2 py-1 dark:bg-gray-800">
                 图片：{articleDocument.completeness.imageCount}
               </span>
-            </div>
-          )}
-
-          {personalRelevance && (
-            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-900/15">
-              <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-amber-900 dark:text-amber-200">
-                <span>相关度：{personalRelevance.relevance === 'high' ? '高' : personalRelevance.relevance === 'medium' ? '中' : personalRelevance.relevance === 'low' ? '低' : '无'}</span>
-              </div>
-              {personalRelevance.recommendationReason && settings?.showRecommendationReasons && (
-                <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">为什么推荐：{personalRelevance.recommendationReason}</p>
-              )}
             </div>
           )}
 

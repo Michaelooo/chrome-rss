@@ -186,8 +186,6 @@ const defaultSettings = {
   aiAutoAnalyzeOnOpen: false,
   showAttentionHighlights: true,
   showArticleQuality: true,
-  showRecommendationReasons: true,
-  attentionTopics: [],
   autoFetchFullContent: true,
   articleTitleLines: 1 as const,
   articleExcerptLines: 2 as const,
