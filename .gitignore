@@ -63,3 +63,8 @@ LOCAL_SETUP.md
 
 # Local presentation files
 slides/
+
+# Generated release packages
+/release/*.zip
+/release/*.sha256
+/release-notes.md

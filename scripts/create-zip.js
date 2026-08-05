@@ -62,7 +62,9 @@ async function createZip() {
   });
 
   archive.pipe(output);
-  archive.directory(distDir, false);
+  archive.directory(distDir, false, (entry) => (
+    entry.name.endsWith('.DS_Store') ? false : entry
+  ));
   await archive.finalize();
 }
 
