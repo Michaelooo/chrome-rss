@@ -1,0 +1,104 @@
+name: Build and publish extension release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Plain SemVer to validate and package, for example 1.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extension-release-${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+      ZIP_PATH: release/chrome-rss-reader-v${{ github.event_name == 'push' && github.ref_name || inputs.version }}.zip
+      NOTES_PATH: release-notes.md
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Verify tag belongs to main
+        if: github.event_name == 'push'
+        run: |
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+
+      - name: Validate release metadata
+        run: node scripts/validate-release.js "$VERSION" --notes="$NOTES_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Run type check
+        run: pnpm type-check
+
+      - name: Build extension ZIP
+        run: pnpm build:zip
+
+      - name: Validate built release
+        run: node scripts/validate-release.js "$VERSION" --dist --notes="$NOTES_PATH"
+
+      - name: Generate SHA-256 checksum
+        run: |
+          cd release
+          sha256sum "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256"
+
+      - name: Upload dry-run artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-rss-reader-v${{ inputs.version }}-dry-run
+          path: |
+            ${{ env.ZIP_PATH }}
+            ${{ env.ZIP_PATH }}.sha256
+            ${{ env.NOTES_PATH }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Create or update GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" \
+              --title "Chrome RSS Reader $VERSION" \
+              --notes-file "$NOTES_PATH"
+          else
+            gh release create "$VERSION" \
+              --verify-tag \
+              --title "Chrome RSS Reader $VERSION" \
+              --notes-file "$NOTES_PATH"
+          fi
+          gh release upload "$VERSION" \
+            "$ZIP_PATH" \
+            "$ZIP_PATH.sha256" \
+            --clobber
