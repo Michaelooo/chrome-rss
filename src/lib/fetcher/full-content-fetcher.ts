@@ -1,4 +1,5 @@
 import { Readability } from '@mozilla/readability';
+import { recoverLazyMedia, resolveArticleUrls } from '@/lib/content/media';
 
 /**
  * Detects the character encoding from an ArrayBuffer by inspecting HTTP Content-Type
@@ -21,45 +22,6 @@ function detectEncoding(buffer: ArrayBuffer, contentType: string): string {
   const enc = encoding.toLowerCase().trim();
   if (enc === 'gbk' || enc === 'gb2312' || enc === 'gb_2312-80') return 'gb18030';
   return enc || 'utf-8';
-}
-
-/**
- * Resolves relative img/a/video/source URLs against the page base URL.
- */
-function resolveRelativeUrls(container: Element, baseUrl: string): void {
-  const base = new URL(baseUrl);
-
-  container.querySelectorAll('img[src]').forEach(img => {
-    const src = img.getAttribute('src');
-    if (src && !src.startsWith('data:')) {
-      try { img.setAttribute('src', new URL(src, base).href); } catch { /* ignore */ }
-    }
-    const srcset = img.getAttribute('srcset');
-    if (srcset) {
-      const resolved = srcset.split(',').map(part => {
-        const [u, descriptor] = part.trim().split(/\s+/);
-        try {
-          const abs = new URL(u, base).href;
-          return descriptor ? `${abs} ${descriptor}` : abs;
-        } catch { return part; }
-      }).join(', ');
-      img.setAttribute('srcset', resolved);
-    }
-  });
-
-  container.querySelectorAll('a[href]').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-      try { a.setAttribute('href', new URL(href, base).href); } catch { /* ignore */ }
-    }
-  });
-
-  container.querySelectorAll('video[src], source[src]').forEach(el => {
-    const src = el.getAttribute('src');
-    if (src) {
-      try { el.setAttribute('src', new URL(src, base).href); } catch { /* ignore */ }
-    }
-  });
 }
 
 /**
@@ -97,6 +59,10 @@ export async function fetchFullContent(url: string): Promise<string> {
   Object.defineProperty(doc, 'documentURI', { value: resolvedBase, configurable: true });
   Object.defineProperty(doc, 'baseURI', { value: resolvedBase, configurable: true });
 
+  // Restore lazy-loaded media before Readability removes source-specific attributes.
+  recoverLazyMedia(doc);
+  resolveArticleUrls(doc, resolvedBase);
+
   const reader = new Readability(doc, { keepClasses: false });
   const article = reader.parse();
 
@@ -107,7 +73,7 @@ export async function fetchFullContent(url: string): Promise<string> {
   // Readability returns a self-contained HTML fragment; resolve any remaining relative URLs
   const wrapper = document.createElement('div');
   wrapper.innerHTML = article.content;
-  resolveRelativeUrls(wrapper, resolvedBase);
+  resolveArticleUrls(wrapper, resolvedBase);
 
   return wrapper.innerHTML;
 }

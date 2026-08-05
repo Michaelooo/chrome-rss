@@ -2,7 +2,11 @@ import type { ChatMessage } from './client';
 
 const MAX_CONTENT_LENGTH = 6000;
 
-export function buildSummarizePrompt(title: string, content: string): ChatMessage[] {
+export function buildSummarizePrompt(
+  title: string,
+  content: string,
+  blocks: Array<{ id: string; type: string; text: string }> = []
+): ChatMessage[] {
   const truncated = content.length > MAX_CONTENT_LENGTH
     ? content.slice(0, MAX_CONTENT_LENGTH) + '...'
     : content;
@@ -10,25 +14,24 @@ export function buildSummarizePrompt(title: string, content: string): ChatMessag
   return [
     {
       role: 'system',
-      content: `你是一个专业的信息提取助手。无论文章是什么语言，输出必须全部使用中文。
+      content: `你是一个克制、可核验的信息提取助手。无论文章是什么语言，输出必须全部使用中文。
 
-你的任务是对文章生成一份详细的结构化摘要，要求如下：
+你的任务是生成结构化摘要，并识别支撑摘要的少量原文依据：
 
 1. summary 字段必须包含以下三个部分，用换行符分隔：
    - 第一段：2-3句话概括文章的核心主题和背景
-   - 第二段：列出 4-8 个关键要点，每个要点独占一行，以"- "开头，要点必须包含具体的数据、技术细节、人名或事实，不要泛泛而谈
+   - 第二段：列出 4-8 个关键要点，每个要点独占一行，以"- "开头，要点必须包含具体的数据、技术细节、人名或事实
    - 第三段：1-2句话总结文章的结论、影响或意义
+2. tags 字段提取 3-5 个关键词标签。
+3. highlights 最多 6 处，只选择能支撑关键观点的结论、证据或行动建议。quote 必须逐字复制自对应 block，blockId 必须来自输入；没有带 ID 的 blocks 时返回空数组。
+4. quality 和 readingGuide 用于帮助用户判断阅读价值，不要夸大文章质量，也不要让整篇文章都成为重点。
 
-2. tags 字段：提取 3-5 个关键词标签
-
-重要：summary 的总长度应在 200-500 字之间，不要过于精简。
-
-以纯 JSON 格式返回，不允许添加 markdown 代码围栏或其他文字：
-{"summary": "核心概括（2-3句话）\\n\\n- 要点1（含具体数据或事实）\\n- 要点2\\n- 要点3\\n- 要点4\\n\\n结论与意义", "tags": ["标签1", "标签2", "标签3"]}`,
+summary 总长度应在 200-500 字之间。只返回纯 JSON，不允许添加 markdown 代码围栏或其他文字：
+{"summary":"核心概括\\n\\n- 关键要点\\n\\n结论与意义","tags":[],"overview":"一句话阅读提示","highlights":[{"id":"h1","blockId":"","quote":"","importance":"high|medium|low","category":"conclusion|evidence|action","explanation":"该原文支撑了哪个关键观点"}],"quality":{"level":"high|medium|low","evidenceDensity":"high|medium|low","reasons":[]},"readingGuide":{"estimatedMinutes":1,"priorityBlockIds":[],"skippableBlockIds":[]}}`,
     },
     {
       role: 'user',
-      content: `文章标题： ${title}\n\n文章内容: ${truncated}`,
+      content: JSON.stringify({ title, content: truncated, blocks }),
     },
   ];
 }
@@ -74,6 +77,54 @@ export function buildDigestPrompt(articles: DigestInput[]): ChatMessage[] {
     },
   ];
 }
+
+
+export interface TitleTranslationInput {
+  articleId: string;
+  title: string;
+}
+
+export function buildTitleTranslationPrompt(
+  articles: TitleTranslationInput[],
+  targetLanguage: string
+): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content: `你是专业标题翻译助手。将输入标题忠实翻译为 ${targetLanguage}，符合中文技术文章标题习惯，保留产品名、模型名和常用技术术语。不得夸张或改写事实。只返回 JSON 数组，每项包含 articleId 和 translatedTitle。`,
+    },
+    { role: 'user', content: JSON.stringify(articles) },
+  ];
+}
+
+export function buildBodyTranslationPrompt(
+  blocks: Array<{ blockId: string; type: string; text: string }>,
+  targetLanguage: string
+): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content: `你是专业文章翻译助手。将每个 block 的 text 忠实、自然地翻译为 ${targetLanguage}。技术术语保持一致，代码内容不要翻译。只返回 JSON 数组，每项严格包含 blockId 和 translatedText，不得遗漏或创造 blockId。`,
+    },
+    { role: 'user', content: JSON.stringify(blocks) },
+  ];
+}
+
+export function buildAttentionAnalysisPrompt(
+  title: string,
+  blocks: Array<{ id: string; type: string; text: string }>
+): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content: `你是克制、可核验的阅读助手。根据带 ID 的原文段落生成中文阅读指南。重点最多 8 处，quote 必须逐字复制自对应 block，blockId 必须来自输入。不要让整篇文章都成为重点。质量只用 high/medium/low，并说明依据。
+只返回 JSON：
+{"overview":"","tags":[],"highlights":[{"id":"h1","blockId":"","quote":"","importance":"high|medium|low","category":"conclusion|evidence|action","explanation":""}],"quality":{"level":"high|medium|low","evidenceDensity":"high|medium|low","reasons":[]},"readingGuide":{"estimatedMinutes":1,"priorityBlockIds":[],"skippableBlockIds":[]}}`,
+    },
+    { role: 'user', content: JSON.stringify({ title, blocks }) },
+  ];
+}
+
 
 export function parseJSONResponse<T>(raw: string): T {
   // Strip markdown code fences if present

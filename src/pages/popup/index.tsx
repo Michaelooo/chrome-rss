@@ -14,6 +14,7 @@ const Popup: React.FC = () => {
   const [feedTitles, setFeedTitles] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [translatedTitles, setTranslatedTitles] = useState<Record<string, string>>({});
 
   const loadData = async (showSpinner = false) => {
     if (showSpinner) {
@@ -25,6 +26,16 @@ const Popup: React.FC = () => {
       db.feeds.toArray(),
       getRecentUnreadArticles(10),
     ]);
+
+    const titleArtifacts = await db.articleArtifacts
+      .where('articleId')
+      .anyOf(articles.map(article => article.id))
+      .and(artifact => artifact.kind === 'title-translation' && artifact.status === 'completed')
+      .toArray();
+    setTranslatedTitles(Object.fromEntries(titleArtifacts.flatMap(artifact => {
+      const data = artifact.data as { translatedTitle?: string } | undefined;
+      return data?.translatedTitle ? [[artifact.articleId, data.translatedTitle]] : [];
+    })));
 
     const map: Record<string, string> = {};
     feeds.forEach(feed => {
@@ -167,7 +178,7 @@ const Popup: React.FC = () => {
                     <span>{formatRelativeTime(article.pubDate)}</span>
                   </div>
                   <p className="mt-1 line-clamp-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {article.title || '未命名文章'}
+                    {translatedTitles[article.id] || article.title || '未命名文章'}
                   </p>
                 </button>
               ))}

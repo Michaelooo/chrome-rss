@@ -153,6 +153,46 @@
     @apply rounded-md border border-white/20 bg-white/10 px-2 py-1 text-[11px] font-medium text-gray-100 transition-colors hover:border-white/30 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary-400/60 dark:border-white/15 dark:bg-white/10 dark:hover:border-white/25 dark:hover:bg-white/20;
   }
 
+  .article-image-failed {
+    @apply min-h-24 border border-dashed border-orange-400 bg-orange-50 opacity-40 dark:bg-orange-950/20;
+  }
+
+  .article-bilingual-block {
+    @apply my-5;
+  }
+
+  .article-translation-block {
+    @apply leading-8 text-gray-800 dark:text-gray-200;
+  }
+
+  .article-translation-list-item {
+    @apply list-none;
+  }
+
+  .article-content td > .article-translation-block,
+  .article-content th > .article-translation-block {
+    @apply text-sm;
+  }
+  .article-ai-highlight {
+    @apply cursor-help rounded px-0.5 text-inherit;
+  }
+
+  .article-ai-highlight-conclusion {
+    @apply bg-yellow-200/90 dark:bg-yellow-700/60;
+  }
+
+  .article-ai-highlight-evidence {
+    @apply bg-blue-200/90 dark:bg-blue-700/60;
+  }
+
+  .article-ai-highlight-action {
+    @apply bg-green-200/90 dark:bg-green-700/60;
+  }
+
+  .article-highlight-block {
+    @apply border-l-4 border-amber-500 pl-3;
+  }
+
   /* 文章内链接样式 - 为导航区域的链接添加主题色 */
   .article-content > p a {
     @apply text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300;

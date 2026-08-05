@@ -1,33 +1,33 @@
+import type { ArticleArtifact, BodyTranslationData } from '@/types';
+
 interface TranslateArticlePayload {
   articleId: string;
-  html: string;
   targetLanguage: string;
   sourceLanguage?: string;
+  force?: boolean;
 }
 
 interface TranslateArticleResponse {
-  translatedText: string;
-  detectedSourceLanguage?: string;
+  artifact?: ArticleArtifact & { data?: BodyTranslationData };
+  success: boolean;
+  error?: string;
 }
 
 export async function translateArticleWithGoogle(
   payload: TranslateArticlePayload
-): Promise<TranslateArticleResponse> {
+): Promise<ArticleArtifact & { data?: BodyTranslationData }> {
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
     throw new Error('Translation is unavailable in this environment.');
   }
 
   const response = await chrome.runtime.sendMessage({
-    type: 'TRANSLATE_ARTICLE',
+    type: 'TRANSLATE_BODY_GOOGLE',
     payload,
-  });
+  }) as TranslateArticleResponse;
 
-  if (!response || !response.success) {
+  if (!response?.success || !response.artifact) {
     throw new Error(response?.error || 'Failed to translate article.');
   }
 
-  return {
-    translatedText: response.translatedText as string,
-    detectedSourceLanguage: response.detectedSourceLanguage as string | undefined,
-  };
+  return response.artifact;
 }

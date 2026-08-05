@@ -13,7 +13,7 @@
 # 安装依赖
 pnpm install
 
-# 启动开发服务器（支持热重载）
+# 启动开发服务器（支持 HMR，自动写入 dist/）
 pnpm dev
 
 # 仅进行类型检查（不构建）
@@ -22,40 +22,51 @@ pnpm type-check
 # 构建生产版本
 pnpm build
 
-# 仅构建后台 Service Worker
-pnpm build:bg
-
 # 创建发布用的 ZIP 包
 pnpm build:zip
 ```
 
 ### Chrome 扩展加载步骤
+
+#### 开发模式（推荐日常开发使用）
+1. 启动开发服务器：`pnpm dev`（会持续监听并写入 `dist/`）
+2. 打开 `chrome://extensions/`，启用"开发者模式"
+3. 点击"加载已解压的扩展程序"并选择 `dist/` 目录（只需加载一次）
+4. 改代码后由 `@crxjs/vite-plugin` 自动推送更新，无需重新加载扩展
+
+#### 生产模式
 1. 构建项目：`pnpm build`
-2. 打开 `chrome://extensions/`
-3. 启用"开发者模式"
-4. 点击"加载已解压的扩展程序"并选择 `dist/` 目录
+2. 在 `chrome://extensions/` 中加载 `dist/` 目录
+
+### 热更新（HMR）行为说明
+
+由 `@crxjs/vite-plugin` 统一驱动，不同层级的更新策略不同：
+
+| 改动位置 | 行为 |
+|---------|------|
+| React 页面（main / popup / options） | 真 HMR，模块热替换，组件状态保留 |
+| CSS / TailwindCSS | 真 HMR，立即生效 |
+| Service Worker（`src/background/index.ts`） | 触发扩展自动 reload（非 HMR） |
+| `manifest.json` | 触发扩展自动 reload |
 
 ## 构建系统架构
 
-项目使用**两个独立的 Vite 配置**来处理不同的构建目标：
+项目只有**一个 Vite 配置** (`vite.config.ts`)，由 `@crxjs/vite-plugin` 读取 `manifest.json` 作为入口清单，统一处理所有构建产物。
 
-### 主 UI 构建 (`vite.config.ts`)
-- 构建 React 组件和页面（main、popup、options）
-- 输出到 `dist/` 目录，资源文件在 `assets/` 中
-- 输入文件：`index.html`、`popup.html`、`options.html`
-- 包含 React 插件和路径别名（`@/` → `./src`）
-
-### 后台 Service Worker 构建 (`vite.config.background.ts`)
-- 将 Service Worker 构建为单个 IIFE 包
-- 入口：`src/background/index.ts` → `dist/background.js`
-- 无代码分割（Service Worker 要求）
-- 使用 `emptyOutDir: false` 保留主构建输出
+### `vite.config.ts` 核心配置
+- `@vitejs/plugin-react`：处理 React + JSX/TSX
+- `@crxjs/vite-plugin`：解析 `manifest.json`，自动收集以下入口：
+  - `popup.html`（弹窗页面）
+  - `options.html`（设置页面）
+  - `index.html`（主阅读器，由 `rollupOptions.input.main` 显式声明）
+  - `src/background/index.ts`（Service Worker，由 manifest 中的 `background.service_worker` 声明）
+- 路径别名：`@/` → `./src`
+- 启用 `sourcemap: true` 便于扩展调试
 
 ### 构建流程
-1. TypeScript 类型检查
-2. 主 UI 构建（React 页面）
-3. 后台 Service Worker 构建
-4. 两个输出合并到 `dist/` 目录
+1. `tsc` 类型检查（仅 `pnpm build` 触发）
+2. Vite + crxjs 一次性构建所有入口（页面 + Service Worker）
+3. 产物统一输出到 `dist/`，可直接作为未打包扩展加载
 
 ## 核心架构模式
 
@@ -199,11 +210,12 @@ src/
 ## Chrome 扩展测试
 
 ### 开发测试
-1. 使用 `pnpm build` 构建
-2. 在 Chrome 中加载未打包的扩展
-3. 检查浏览器控制台错误
-4. 测试所有三个页面（main、popup、options）
-5. 验证后台 Service Worker 功能
+1. 启动开发服务器：`pnpm dev`
+2. 在 Chrome 中加载 `dist/`（仅首次需要）
+3. 修改代码后观察 HMR 是否生效；改 background / manifest 时确认扩展是否自动 reload
+4. 检查浏览器控制台错误
+5. 测试所有三个页面（main、popup、options）
+6. 验证后台 Service Worker 功能
 
 ### 扩展特定测试
 - Feed 在后台正常更新
