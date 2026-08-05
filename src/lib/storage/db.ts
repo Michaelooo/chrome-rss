@@ -1,5 +1,16 @@
 import Dexie, { Table } from 'dexie';
-import type { Feed, Article, Folder, FeedFilter, Settings, Digest } from '@/types';
+import type {
+  Feed,
+  Article,
+  Folder,
+  FeedFilter,
+  Settings,
+  Digest,
+  ArticleDocument,
+  ArticleArtifact,
+  ArticleProcessingJob,
+  AIProviderSettings,
+} from '@/types';
 
 export class RSSDatabase extends Dexie {
   feeds!: Table<Feed, string>;
@@ -8,6 +19,9 @@ export class RSSDatabase extends Dexie {
   filters!: Table<FeedFilter, string>;
   settings!: Table<Settings, number>;
   digests!: Table<Digest, string>;
+  articleDocuments!: Table<ArticleDocument, string>;
+  articleArtifacts!: Table<ArticleArtifact, string>;
+  processingJobs!: Table<ArticleProcessingJob, string>;
 
 
   constructor() {
@@ -103,6 +117,32 @@ export class RSSDatabase extends Dexie {
             .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
         }
       });
+
+    this.version(8)
+      .stores({
+        articleDocuments: 'articleId, contentHash, updatedAt',
+        articleArtifacts: 'id, articleId, kind, status, updatedAt, [articleId+kind]',
+        processingJobs: 'id, articleId, type, status, updatedAt, [status+updatedAt]',
+      })
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, mergeSettingsWithDefaults(setting as Settings));
+        }
+      });
+
+    this.version(9)
+      .stores({})
+      .upgrade(async transaction => {
+        const settings = await transaction.table('settings').toArray();
+        for (const setting of settings) {
+          await transaction
+            .table('settings')
+            .update(setting.id, normalizeSettings(setting as Partial<Settings>));
+        }
+      });
   }
 }
 
@@ -130,21 +170,86 @@ const defaultSettings = {
   translationTargetLanguage: 'zh-CN',
   translationSourceLanguage: '',
   translationAutoFetch: false,
+  aiAutoTranslateTitles: false,
+  aiTitleTranslationBatchLimit: 40,
+  bodyTranslationProvider: 'ai' as const,
+  defaultTranslationView: 'original' as const,
   enableAI: false,
   aiApiEndpoint: 'https://api.openai.com/v1',
   aiApiKey: '',
   aiModel: 'gpt-4o-2024-11-20',
+  aiPrimaryProviderId: 'primary',
+  aiPrimaryProviderName: '主服务商',
+  aiFallbackProviders: [] as AIProviderSettings[],
   aiAutoSummarize: false,
+  aiAttentionAnalysisEnabled: true,
+  aiAutoAnalyzeOnOpen: false,
+  showAttentionHighlights: true,
+  showArticleQuality: true,
   autoFetchFullContent: true,
   articleTitleLines: 1 as const,
   articleExcerptLines: 2 as const,
 };
 
-function mergeSettingsWithDefaults(partial: Partial<Settings>): Settings {
+function normalizeProviderId(value: unknown, fallback: string, usedIds: Set<string>): string {
+  const base = typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  let id = base;
+  let suffix = 2;
+  while (usedIds.has(id)) {
+    id = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  usedIds.add(id);
+  return id;
+}
+
+export function normalizeAIProviderSettings(
+  providers: unknown,
+  primaryId = 'primary'
+): AIProviderSettings[] {
+  if (!Array.isArray(providers)) return [];
+  const usedIds = new Set([primaryId]);
+  return providers.flatMap((provider, index) => {
+    if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return [];
+    const candidate = provider as Partial<AIProviderSettings>;
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+    const endpoint = typeof candidate.endpoint === 'string' ? candidate.endpoint.trim() : '';
+    const apiKey = typeof candidate.apiKey === 'string' ? candidate.apiKey.trim() : '';
+    const model = typeof candidate.model === 'string' ? candidate.model.trim() : '';
+    if (!name || !endpoint || !apiKey || !model) return [];
+    return [{
+      id: normalizeProviderId(candidate.id, `fallback-${index + 1}`, usedIds),
+      name,
+      endpoint,
+      apiKey,
+      model,
+      enabled: candidate.enabled !== false,
+    }];
+  });
+}
+
+export function normalizeSettings(partial: Partial<Settings>): Settings {
+  const primaryId = typeof partial.aiPrimaryProviderId === 'string' && partial.aiPrimaryProviderId.trim()
+    ? partial.aiPrimaryProviderId.trim()
+    : defaultSettings.aiPrimaryProviderId;
   return {
     ...defaultSettings,
     ...partial,
+    aiApiEndpoint: typeof partial.aiApiEndpoint === 'string'
+      ? partial.aiApiEndpoint.trim()
+      : defaultSettings.aiApiEndpoint,
+    aiApiKey: typeof partial.aiApiKey === 'string' ? partial.aiApiKey.trim() : '',
+    aiModel: typeof partial.aiModel === 'string' ? partial.aiModel.trim() : defaultSettings.aiModel,
+    aiPrimaryProviderId: primaryId,
+    aiPrimaryProviderName: typeof partial.aiPrimaryProviderName === 'string' && partial.aiPrimaryProviderName.trim()
+      ? partial.aiPrimaryProviderName.trim()
+      : defaultSettings.aiPrimaryProviderName,
+    aiFallbackProviders: normalizeAIProviderSettings(partial.aiFallbackProviders, primaryId),
   };
+}
+
+function mergeSettingsWithDefaults(partial: Partial<Settings>): Settings {
+  return normalizeSettings(partial);
 }
 
 // Initialize default settings
@@ -190,8 +295,20 @@ export async function updateFeedSortOrders(
 }
 
 export async function deleteFeed(id: string): Promise<void> {
-  await db.feeds.delete(id);
-  await db.articles.where('feedId').equals(id).delete();
+  const articleIds = await db.articles.where('feedId').equals(id).primaryKeys();
+  await db.transaction(
+    'rw',
+    [db.feeds, db.articles, db.articleDocuments, db.articleArtifacts, db.processingJobs],
+    async () => {
+      await db.feeds.delete(id);
+      await db.articles.where('feedId').equals(id).delete();
+      if (articleIds.length > 0) {
+        await db.articleDocuments.where('articleId').anyOf(articleIds).delete();
+        await db.articleArtifacts.where('articleId').anyOf(articleIds).delete();
+        await db.processingJobs.where('articleId').anyOf(articleIds).delete();
+      }
+    }
+  );
 }
 
 export async function getFeed(id: string): Promise<Feed | undefined> {
@@ -237,6 +354,38 @@ export async function addArticles(articles: Omit<Article, 'id' | 'createdAt'>[])
 
 export async function updateArticle(id: string, updates: Partial<Article>): Promise<void> {
   await db.articles.update(id, updates);
+}
+
+export async function saveArticleDocument(document: ArticleDocument): Promise<void> {
+  const existing = await db.articleDocuments.get(document.articleId);
+  await db.articleDocuments.put({
+    ...document,
+    createdAt: existing?.createdAt ?? document.createdAt,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function getArticleDocument(articleId: string): Promise<ArticleDocument | undefined> {
+  return db.articleDocuments.get(articleId);
+}
+
+export async function getArticleArtifacts(articleId: string): Promise<ArticleArtifact[]> {
+  return db.articleArtifacts.where('articleId').equals(articleId).toArray();
+}
+
+export async function getArticleArtifact(
+  articleId: string,
+  kind: ArticleArtifact['kind']
+): Promise<ArticleArtifact | undefined> {
+  return db.articleArtifacts.where('[articleId+kind]').equals([articleId, kind]).first();
+}
+
+export async function saveArticleArtifact(artifact: ArticleArtifact): Promise<void> {
+  await db.articleArtifacts.put({ ...artifact, updatedAt: Date.now() });
+}
+
+export async function saveProcessingJob(job: ArticleProcessingJob): Promise<void> {
+  await db.processingJobs.put({ ...job, updatedAt: Date.now() });
 }
 
 export async function markArticleAsRead(id: string, isRead: boolean = true): Promise<void> {
@@ -480,7 +629,9 @@ export async function getSettings(): Promise<Settings> {
 export async function updateSettings(updates: Partial<Settings>): Promise<void> {
   const settings = await db.settings.toArray();
   if (settings.length > 0) {
-    await db.settings.update(1, updates);
+    const current = settings[0];
+    const normalized = normalizeSettings({ ...current, ...updates });
+    await db.settings.put({ ...normalized, id: (current as Settings & { id: number }).id } as Settings & { id: number });
   }
 }
 

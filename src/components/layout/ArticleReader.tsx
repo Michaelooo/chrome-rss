@@ -6,8 +6,16 @@ import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store';
 import type { Settings } from '@/types';
-import { db } from '@/lib/storage/db';
-import type { Article } from '@/types';
+import { db, getArticleArtifacts, saveArticleDocument } from '@/lib/storage/db';
+import type {
+  Article,
+  ArticleArtifact,
+  ArticleDocument,
+  AttentionAnalysisData,
+  BodyTranslationData,
+  TitleTranslationData,
+} from '@/types';
+import { enableImageReferer } from '@/lib/chrome/image-referer';
 import { fetchFullContent } from '@/lib/fetcher/full-content-fetcher';
 
 const FONT_SIZE_OPTIONS: { value: Settings['fontSize']; tKey: string }[] = [
@@ -40,7 +48,12 @@ const CONTENT_WIDTH_CLASS: Record<Settings['contentWidth'], string> = {
 import { formatRelativeTime } from '@/lib/utils';
 import { emitArticleUpdated, subscribeArticleUpdated } from '@/lib/events/articles';
 import { translateArticleWithGoogle } from '@/lib/translation';
-import { summarizeArticle } from '@/lib/ai';
+import { buildArticleDocument, buildTranslatedDocumentHtml, hashText } from '@/lib/content/article-document';
+import { getConfiguredAIProviders, isArtifactFromConfiguredProvider } from '@/lib/ai/client';
+import {
+  summarizeArticle,
+  translateArticleBodyWithAI,
+} from '@/lib/ai';
 
 interface CodeBlockCleanupRecord {
   wrapper: HTMLDivElement;
@@ -185,31 +198,6 @@ const enhanceCodeBlocks = (
   };
 };
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function buildHtmlFromTranslatedText(text: string): string {
-  const normalized = text.replace(/\r/g, '').trim();
-  if (!normalized) {
-    return '';
-  }
-
-  const paragraphs = normalized.split(/\n{2,}/).map(paragraph => paragraph.trim()).filter(Boolean);
-  if (paragraphs.length === 0) {
-    return `<p>${escapeHtml(normalized).replace(/\n/g, '<br />')}</p>`;
-  }
-
-  return paragraphs
-    .map(paragraph => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`)
-    .join('');
-}
-
 export const ArticleReader: React.FC = () => {
   const { t } = useTranslation();
   const { uiState, settings, feeds, updateSettings } = useAppStore();
@@ -217,12 +205,15 @@ export const ArticleReader: React.FC = () => {
   const [previewImage, setPreviewImage] = useState<{ src: string; alt?: string } | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState<string | null>(null);
-  const [showTranslation, setShowTranslation] = useState(false);
-  const [detectedSourceLanguage, setDetectedSourceLanguage] = useState<string | undefined>();
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isFetchingFullContent, setIsFetchingFullContent] = useState(false);
   const [fullContentError, setFullContentError] = useState<string | null>(null);
+  const [articleDocument, setArticleDocument] = useState<ArticleDocument | null>(null);
+  const [artifacts, setArtifacts] = useState<ArticleArtifact[]>([]);
+  const [translationView, setTranslationView] = useState<'original' | 'translated' | 'bilingual'>('original');
+  const [failedImages, setFailedImages] = useState<Record<string, string>>({});
+  const imageRefererRetriesRef = useRef<Set<string>>(new Set());
   const contentRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -231,12 +222,15 @@ export const ArticleReader: React.FC = () => {
     } else {
       setArticle(null);
     }
-    setShowTranslation(false);
     setTranslationError(null);
     setIsTranslating(false);
-    setDetectedSourceLanguage(undefined);
     setSummaryError(null);
     setFullContentError(null);
+    setArticleDocument(null);
+    setArtifacts([]);
+    setTranslationView(settings?.defaultTranslationView ?? 'original');
+    setFailedImages({});
+    imageRefererRetriesRef.current.clear();
   }, [uiState.selectedArticleId]);
 
   useEffect(() => {
@@ -255,13 +249,46 @@ export const ArticleReader: React.FC = () => {
   }, []);
 
   const loadArticle = async (id: string) => {
-    const article = await db.articles.get(id);
-    if (article) {
-      setArticle(article);
-      setShowTranslation(false);
-      setTranslationError(null);
-      setIsTranslating(false);
-      setDetectedSourceLanguage(undefined);
+    const loadedArticle = await db.articles.get(id);
+    if (!loadedArticle) return;
+
+    setArticle(loadedArticle);
+    setTranslationError(null);
+    setIsTranslating(false);
+
+    const [document, storedArtifacts] = await Promise.all([
+      buildArticleDocument(loadedArticle),
+      getArticleArtifacts(id),
+    ]);
+    if (document) {
+      await saveArticleDocument(document);
+    }
+    const titleHash = await hashText(loadedArticle.title.trim());
+    const targetLanguage = settings?.translationTargetLanguage?.trim() || 'zh-CN';
+    const validArtifacts = storedArtifacts.filter(artifact => {
+      if (artifact.kind === 'title-translation') {
+        return artifact.titleHash === titleHash && artifact.targetLanguage === targetLanguage;
+      }
+      if (!document || artifact.contentHash !== document.contentHash) return false;
+      if (artifact.kind === 'body-translation') {
+        const provider = settings?.bodyTranslationProvider ?? 'ai';
+        const modelMatches = provider === 'google'
+          ? artifact.model === 'google-translate'
+          : !!settings && isArtifactFromConfiguredProvider(
+              artifact,
+              getConfiguredAIProviders(settings)
+            );
+        return artifact.titleHash === titleHash &&
+          artifact.targetLanguage === targetLanguage &&
+          artifact.provider === provider &&
+          modelMatches;
+      }
+      return true;
+    });
+    setArticleDocument(document);
+    setArtifacts(validArtifacts);
+    if (!validArtifacts.some(artifact => artifact.kind === 'body-translation' && artifact.status === 'completed')) {
+      setTranslationView('original');
     }
   };
 
@@ -270,8 +297,9 @@ export const ArticleReader: React.FC = () => {
     setIsSummarizing(true);
     setSummaryError(null);
     try {
-      const summary = await summarizeArticle({ articleId: article.id });
+      const { summary, artifact } = await summarizeArticle({ articleId: article.id });
       setArticle({ ...article, summary });
+      if (artifact) updateArtifact(artifact);
       emitArticleUpdated(article.id, { summary });
     } catch (error) {
       setSummaryError(error instanceof Error ? error.message : '生成摘要失败');
@@ -317,6 +345,11 @@ export const ArticleReader: React.FC = () => {
       await db.articles.update(article.id, { fullContent: html });
       const updated = { ...article, fullContent: html };
       setArticle(updated);
+      const document = await buildArticleDocument(updated);
+      if (document) await saveArticleDocument(document);
+      setArticleDocument(document);
+      setArtifacts(previous => previous.filter(item => item.kind === 'title-translation'));
+      setTranslationView(settings?.defaultTranslationView ?? 'original');
       emitArticleUpdated(article.id, { fullContent: html });
     } catch (err) {
       const message = err instanceof Error ? err.message : t('articleReader.fullContentError');
@@ -348,6 +381,29 @@ export const ArticleReader: React.FC = () => {
     });
 
     const images = Array.from(container.querySelectorAll<HTMLImageElement>('img'));
+    const handleImageError = async (event: Event) => {
+      const target = event.currentTarget as HTMLImageElement;
+      const src = target.currentSrc || target.src;
+      if (!src) return;
+
+      if (article.link && !imageRefererRetriesRef.current.has(src)) {
+        imageRefererRetriesRef.current.add(src);
+        try {
+          await enableImageReferer(src, article.link);
+          target.removeAttribute('srcset');
+          target.removeAttribute('src');
+          requestAnimationFrame(() => {
+            target.src = src;
+          });
+          return;
+        } catch (error) {
+          console.error('Failed to enable image referer fallback:', error);
+        }
+      }
+
+      setFailedImages(previous => ({ ...previous, [src]: target.alt || '' }));
+      target.classList.add('article-image-failed');
+    };
     const handleImageClick = (event: Event) => {
       const target = event.currentTarget as HTMLImageElement;
       setPreviewImage({ src: target.currentSrc || target.src, alt: target.alt });
@@ -365,6 +421,7 @@ export const ArticleReader: React.FC = () => {
       image.setAttribute('tabindex', '0');
       image.addEventListener('click', handleImageClick);
       image.addEventListener('keydown', handleImageKeyDown);
+      image.addEventListener('error', handleImageError);
     });
 
     const videos = Array.from(container.querySelectorAll<HTMLVideoElement>('video'));
@@ -398,6 +455,7 @@ export const ArticleReader: React.FC = () => {
       images.forEach(image => {
         image.removeEventListener('click', handleImageClick);
         image.removeEventListener('keydown', handleImageKeyDown);
+        image.removeEventListener('error', handleImageError);
       });
       cleanupCodeBlocks();
     };
@@ -437,135 +495,162 @@ export const ArticleReader: React.FC = () => {
     return settings.translationSourceLanguage?.trim() || undefined;
   }, [settings]);
 
-  const activeTranslation = useMemo(() => {
-    if (!article || !translationTargetLanguage) {
-      return undefined;
-    }
-    return article.translations?.[translationTargetLanguage];
-  }, [article, translationTargetLanguage]);
+  const titleTranslationArtifact = useMemo(
+    () => artifacts.find(item => item.kind === 'title-translation' && item.status === 'completed'),
+    [artifacts]
+  );
+  const bodyTranslationArtifact = useMemo(
+    () => artifacts.find(item => item.kind === 'body-translation' && item.status === 'completed'),
+    [artifacts]
+  );
+  const attentionArtifact = useMemo(
+    () => artifacts.find(item => item.kind === 'attention-analysis' && item.status === 'completed'),
+    [artifacts]
+  );
+  const titleTranslation = titleTranslationArtifact?.data as TitleTranslationData | undefined;
+  const bodyTranslation = bodyTranslationArtifact?.data as BodyTranslationData | undefined;
+  const attentionAnalysis = attentionArtifact?.data as AttentionAnalysisData | undefined;
+  const translatedTitle = bodyTranslation?.translatedTitle || titleTranslation?.translatedTitle;
+  const displayedTitle = translationView === 'original'
+    ? article?.title
+    : translatedTitle || article?.title;
 
-  const translateCurrentArticle = async ({
-    auto = false,
-    signal,
-  }: {
-    auto?: boolean;
-    signal?: AbortSignal;
-  } = {}): Promise<void> => {
-    if (!article || !translationTargetLanguage || !settings?.enableTranslation) {
-      return;
-    }
+  const updateArtifact = (artifact: ArticleArtifact) => {
+    setArtifacts(previous => [
+      ...previous.filter(item => item.kind !== artifact.kind),
+      artifact,
+    ]);
+  };
 
-    if (!article.content && !article.description) {
+  const handleTranslateFullArticle = async (force = false) => {
+    if (!article || !translationTargetLanguage || !settings?.enableTranslation || isTranslating) return;
+    if (!articleDocument?.blocks.length) {
       setTranslationError(t('articleReader.noTranslatableContent'));
       return;
     }
 
-    if (activeTranslation && !auto) {
-      setShowTranslation(true);
-      return;
-    }
-
-    if (isTranslating) {
-      return;
-    }
-
+    setIsTranslating(true);
+    setTranslationError(null);
     try {
-      if (signal?.aborted) {
-        return;
-      }
-
-      setIsTranslating(true);
-      setTranslationError(null);
-      const { translatedText, detectedSourceLanguage: detected } =
-        await translateArticleWithGoogle({
-          articleId: article.id,
-          html: article.content || article.description || '',
-          targetLanguage: translationTargetLanguage,
-          sourceLanguage: translationSourceLanguage,
-        });
-
-      if (signal?.aborted) {
-        return;
-      }
-
-      const contentHtml = buildHtmlFromTranslatedText(translatedText);
-      const translations = {
-        ...(article.translations ?? {}),
-        [translationTargetLanguage]: {
-          contentHtml,
-          translatedAt: Date.now(),
-          provider: 'google' as const,
-        },
-      };
-
-      await db.articles.update(article.id, { translations });
-      const updatedArticle = { ...article, translations };
-      setArticle(updatedArticle);
-      setShowTranslation(true);
-      setDetectedSourceLanguage(detected);
-      emitArticleUpdated(article.id, { translations });
+      const artifact = settings.bodyTranslationProvider === 'google'
+        ? await translateArticleWithGoogle({
+            articleId: article.id,
+            targetLanguage: translationTargetLanguage,
+            sourceLanguage: translationSourceLanguage,
+            force,
+          })
+        : await translateArticleBodyWithAI({
+            articleId: article.id,
+            targetLanguage: translationTargetLanguage,
+            force,
+          });
+      updateArtifact(artifact);
+      setTranslationView('translated');
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t('articleReader.translationFailed');
-      setTranslationError(message);
+      setTranslationError(error instanceof Error ? error.message : t('articleReader.translationFailed'));
     } finally {
-      if (signal?.aborted) {
-        return;
-      }
       setIsTranslating(false);
     }
   };
 
   useEffect(() => {
-    if (!article) return;
-    if (!translationTargetLanguage) return;
-    if (!settings?.enableTranslation) return;
-    if (!settings.translationAutoFetch) return;
-    if (activeTranslation) {
-      setShowTranslation(true);
-      return;
-    }
-    const controller = new AbortController();
-    void translateCurrentArticle({ auto: true, signal: controller.signal });
-    return () => {
-      controller.abort();
-    };
+    if (!article || !articleDocument || !settings?.translationAutoFetch) return;
+    if (!settings.enableTranslation || bodyTranslation || isTranslating) return;
+    void handleTranslateFullArticle();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [article, activeTranslation, translationTargetLanguage, translationSourceLanguage, settings]);
+  }, [article?.id, articleDocument?.contentHash, settings?.translationAutoFetch, bodyTranslation]);
 
-  const handleTranslationButtonClick = async () => {
-    if (!settings?.enableTranslation) return;
-    if (!translationTargetLanguage) return;
+  useEffect(() => {
+    if (!article || !articleDocument || !settings?.enableAI || !settings.aiAutoAnalyzeOnOpen) return;
+    if (attentionAnalysis || isSummarizing) return;
+    void handleGenerateSummary();
+    // The action is intentionally keyed by the prepared content hash.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article?.id, articleDocument?.contentHash, settings?.enableAI, settings?.aiAutoAnalyzeOnOpen, attentionAnalysis]);
 
-    if (activeTranslation) {
-      setShowTranslation(prev => !prev);
-      return;
+  const translatedBlockMap = useMemo(
+    () => new Map(bodyTranslation?.blocks.map(block => [block.blockId, block.translatedText]) || []),
+    [bodyTranslation]
+  );
+
+  const blockBasedContent = useMemo(() => {
+    if (!articleDocument || translationView === 'original' || !bodyTranslation) return null;
+    return buildTranslatedDocumentHtml(articleDocument, translatedBlockMap, translationView);
+  }, [articleDocument, translationView, bodyTranslation, translatedBlockMap]);
+  const renderedContentHtml = articleDocument?.canonicalHtml || '';
+
+  useEffect(() => {
+    if (!attentionAnalysis || !settings?.showAttentionHighlights || blockBasedContent) return;
+    const container = contentRef.current;
+    if (!container) return;
+    const marks: HTMLElement[] = [];
+
+    for (const highlight of attentionAnalysis.highlights) {
+      const block = container.querySelector<HTMLElement>(`[data-block-id="${highlight.blockId}"]`);
+      if (!block) continue;
+      const fullText = block.textContent || '';
+      const targetStart = fullText.indexOf(highlight.quote);
+      if (targetStart < 0) {
+        block.classList.add('article-highlight-block');
+        block.title = highlight.explanation;
+        continue;
+      }
+      const targetEnd = targetStart + highlight.quote.length;
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      let offset = 0;
+      let startNode: Text | null = null;
+      let startOffset = 0;
+      let endNode: Text | null = null;
+      let endOffset = 0;
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text;
+        const nextOffset = offset + node.data.length;
+        if (!startNode && targetStart >= offset && targetStart <= nextOffset) {
+          startNode = node;
+          startOffset = targetStart - offset;
+        }
+        if (targetEnd >= offset && targetEnd <= nextOffset) {
+          endNode = node;
+          endOffset = targetEnd - offset;
+          break;
+        }
+        offset = nextOffset;
+      }
+      if (!startNode || !endNode) continue;
+      const range = document.createRange();
+      range.setStart(startNode, startOffset);
+      range.setEnd(endNode, endOffset);
+      const mark = document.createElement('mark');
+      mark.className = `article-ai-highlight article-ai-highlight-${highlight.category}`;
+      mark.title = highlight.explanation;
+      try {
+        range.surroundContents(mark);
+        marks.push(mark);
+      } catch {
+        block.classList.add('article-highlight-block');
+        block.title = highlight.explanation;
+      }
     }
 
-    await translateCurrentArticle();
-  };
-
-  const renderedContentHtml = useMemo(() => {
-    let html: string;
-    if (showTranslation && activeTranslation) {
-      html = activeTranslation.contentHtml;
-    } else {
-      html = article?.fullContent || article?.content || article?.description || '';
-    }
-    // Decode entity-encoded HTML tags: &lt;img ...&gt; → <img ...>
-    html = html.replace(/&lt;\s*(\/?\s*(?:img|br|hr|source|video|audio|picture|figure|figcaption|p|div|span|a|table|tr|td|th|ul|ol|li|h[1-6]|blockquote|pre|code|em|strong|b|i|u|s|del|ins|mark|sub|sup|iframe)\b)([^]*?)&gt;/gi, '<$1$2>');
-    return html;
-  }, [showTranslation, activeTranslation, article]);
+    return () => {
+      marks.forEach(mark => mark.replaceWith(...Array.from(mark.childNodes)));
+      container.querySelectorAll('.article-highlight-block').forEach(block => {
+        block.classList.remove('article-highlight-block');
+        block.removeAttribute('title');
+      });
+      container.normalize();
+    };
+  }, [attentionAnalysis, settings?.showAttentionHighlights, renderedContentHtml, blockBasedContent]);
 
   const translationInfo = useMemo(() => {
-    if (!showTranslation || !activeTranslation) {
-      return null;
-    }
-    const translatedAt = new Date(activeTranslation.translatedAt);
-    return `${t('articleReader.translatedByGoogle')} \u00b7 ${translatedAt.toLocaleString()}${
-      detectedSourceLanguage ? ` \u00b7 ${t('articleReader.detectedLang', { lang: detectedSourceLanguage.toUpperCase() })}` : ''
-    }`;
-  }, [showTranslation, activeTranslation, detectedSourceLanguage]);
+    if (translationView === 'original' || !bodyTranslationArtifact?.generatedAt) return null;
+    const translatedAt = new Date(bodyTranslationArtifact.generatedAt).toLocaleString();
+    const provider = bodyTranslationArtifact.provider === 'ai' ? 'AI' : 'Google';
+    const language = bodyTranslation?.detectedSourceLanguage
+      ? ` \u00b7 ${t('articleReader.detectedLang', { lang: bodyTranslation.detectedSourceLanguage.toUpperCase() })}`
+      : '';
+    return `${provider} \u7ffb\u8bd1 \u00b7 ${translatedAt}${language}`;
+  }, [translationView, bodyTranslationArtifact, bodyTranslation, t]);
 
   if (!article) {
     return (
@@ -597,8 +682,13 @@ export const ArticleReader: React.FC = () => {
                 )}
               </div>
               <h1 className="text-3xl font-semibold leading-tight text-gray-900 dark:text-gray-100">
-                {article.title}
+                {displayedTitle}
               </h1>
+              {translatedTitle && translationView !== 'original' && (
+                <p className="text-sm text-gray-500 dark:text-gray-400" title="原标题">
+                  {article.title}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                 <div className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
@@ -617,29 +707,49 @@ export const ArticleReader: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {settings?.enableTranslation && translationTargetLanguage && (
+            <div className="flex flex-wrap items-center gap-2">
+              {!settings?.enableTranslation && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleTranslationButtonClick}
-                  title={
-                    activeTranslation
-                      ? showTranslation
-                        ? t('articleReader.viewOriginalTranslated')
-                        : t('articleReader.viewTranslated')
-                      : t('articleReader.translate')
-                  }
+                  onClick={() => window.open(chrome.runtime.getURL('options.html#translation-settings'), '_blank')}
+                  title="在设置中选择 AI 或 Google 翻译方式"
+                >
+                  开启翻译
+                </Button>
+              )}
+              {settings?.enableTranslation && translationTargetLanguage && !bodyTranslation && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void handleTranslateFullArticle()}
                   disabled={isTranslating}
                 >
-                  {activeTranslation
-                    ? showTranslation
-                      ? t('articleReader.viewOriginalTranslated')
-                      : t('articleReader.viewTranslated')
-                    : isTranslating
-                      ? t('articleReader.translating')
-                      : t('articleReader.translate')}
+                  {isTranslating ? t('articleReader.translating') : '翻译全文'}
                 </Button>
+              )}
+              {bodyTranslation && (
+                <>
+                  <div className="inline-flex rounded-md border border-gray-200 dark:border-gray-700 p-0.5">
+                    {(['original', 'translated', 'bilingual'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => setTranslationView(mode)}
+                        className={`rounded px-2 py-1 text-xs ${translationView === mode ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' : 'text-gray-500'}`}
+                      >
+                        {mode === 'original' ? '原文' : mode === 'translated' ? '中文' : '双语'}
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleTranslateFullArticle(true)}
+                    disabled={isTranslating}
+                  >
+                    {isTranslating ? t('articleReader.translating') : '重新翻译'}
+                  </Button>
+                </>
               )}
 
               {article.link && (
@@ -782,6 +892,20 @@ export const ArticleReader: React.FC = () => {
             </div>
           )}
 
+          {articleDocument && (
+            <div className="mb-4 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <span className="rounded-full bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                完整度：{articleDocument.completeness.level === 'high' ? '高' : articleDocument.completeness.level === 'medium' ? '中' : '低'}
+              </span>
+              <span className="rounded-full bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                来源：{articleDocument.source === 'fullContent' ? '抓取全文' : articleDocument.source === 'content' ? 'RSS 正文' : 'RSS 摘要'}
+              </span>
+              <span className="rounded-full bg-gray-100 px-2 py-1 dark:bg-gray-800">
+                图片：{articleDocument.completeness.imageCount}
+              </span>
+            </div>
+          )}
+
           {settings?.enableAI && (
             <div className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
               <div className="flex items-center justify-between mb-2">
@@ -792,6 +916,14 @@ export const ArticleReader: React.FC = () => {
               </div>
               {article.summary ? (
                 <>
+                  {attentionAnalysis && (
+                    <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                      <span>聚焦阅读约 {attentionAnalysis.readingGuide.estimatedMinutes} 分钟</span>
+                      {settings?.showArticleQuality && (
+                        <span>质量：{attentionAnalysis.quality.level === 'high' ? '高' : attentionAnalysis.quality.level === 'medium' ? '中' : '低'}</span>
+                      )}
+                    </div>
+                  )}
                   <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
                     {article.summary.text.split('\n').map((line, i) => {
                       const trimmed = line.trim();
@@ -802,6 +934,12 @@ export const ArticleReader: React.FC = () => {
                       return <p key={i} className="my-1">{trimmed}</p>;
                     })}
                   </div>
+                  {attentionAnalysis?.overview && (
+                    <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">阅读提示：{attentionAnalysis.overview}</p>
+                  )}
+                  {attentionAnalysis && settings?.showArticleQuality && attentionAnalysis.quality.reasons.length > 0 && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">质量依据：{attentionAnalysis.quality.reasons.join('；')}</p>
+                  )}
                   {article.summary.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3">
                       {article.summary.tags.map(tag => (
@@ -815,12 +953,18 @@ export const ArticleReader: React.FC = () => {
               ) : summaryError ? (
                 <p className="text-sm text-red-600 dark:text-red-400">{summaryError}</p>
               ) : (
-                <p className="text-sm text-gray-500">点击"生成摘要"按钮获取 AI 摘要。</p>
+                <p className="text-sm text-gray-500">点击"生成摘要"按钮获取包含关键观点和正文依据的 AI 摘要。</p>
               )}
             </div>
           )}
 
-          {renderedContentHtml ? (
+          {blockBasedContent ? (
+            <article
+              ref={contentRef}
+              className={`article-content ${FONT_SIZE_CLASS[settings?.fontSize ?? 'medium']}`}
+              dangerouslySetInnerHTML={{ __html: blockBasedContent }}
+            />
+          ) : renderedContentHtml ? (
             <article
               ref={contentRef}
               className={`article-content ${FONT_SIZE_CLASS[settings?.fontSize ?? 'medium']}`}
@@ -830,6 +974,28 @@ export const ArticleReader: React.FC = () => {
             />
           ) : (
             <p className="text-gray-500">{t('articleReader.noContent')}</p>
+          )}
+
+          {Object.keys(failedImages).length > 0 && (
+            <div className="mt-4 space-y-2">
+              {Object.entries(failedImages).map(([src, alt]) => (
+                <div key={src} className="rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800 dark:border-orange-900/60 dark:bg-orange-900/20 dark:text-orange-300">
+                  图片加载失败：{alt || '无图片说明'}
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => window.open(src, '_blank')} className="underline">打开原图</button>
+                    <button onClick={() => {
+                      const image = contentRef.current?.querySelector<HTMLImageElement>(`img[src="${CSS.escape(src)}"]`);
+                      if (image) image.src = src;
+                      setFailedImages(previous => {
+                        const next = { ...previous };
+                        delete next[src];
+                        return next;
+                      });
+                    }} className="underline">重试</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </ScrollArea>

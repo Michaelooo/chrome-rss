@@ -23,7 +23,143 @@ export interface ArticleSummary {
   text: string;
   tags: string[];
   model: string;
+  aiProviderId?: string;
+  aiProviderName?: string;
   generatedAt: number;
+}
+
+export type ArticleContentSource = 'fullContent' | 'content' | 'description';
+export type ArticleBlockType =
+  | 'heading'
+  | 'paragraph'
+  | 'list-item'
+  | 'blockquote'
+  | 'code'
+  | 'caption'
+  | 'table-cell';
+
+export interface ArticleDocumentBlock {
+  id: string;
+  type: ArticleBlockType;
+  text: string;
+  html: string;
+  order: number;
+}
+
+export interface ArticleCompleteness {
+  level: 'high' | 'medium' | 'low';
+  reasons: string[];
+  imageCount: number;
+  restoredImageCount: number;
+}
+
+export interface ArticleDocument {
+  articleId: string;
+  source: ArticleContentSource;
+  canonicalHtml: string;
+  blocks: ArticleDocumentBlock[];
+  contentHash: string;
+  pipelineVersion: number;
+  textLength: number;
+  completeness: ArticleCompleteness;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TitleTranslationData {
+  originalTitle: string;
+  translatedTitle: string;
+  detectedLanguage?: string;
+}
+
+export interface TranslatedArticleBlock {
+  blockId: string;
+  translatedText: string;
+}
+
+export interface BodyTranslationData {
+  originalTitle: string;
+  translatedTitle: string;
+  detectedSourceLanguage?: string;
+  blocks: TranslatedArticleBlock[];
+  completedBlockIds: string[];
+  totalBlocks: number;
+}
+
+export interface AttentionHighlight {
+  id: string;
+  blockId: string;
+  quote: string;
+  importance: 'high' | 'medium' | 'low';
+  category: 'conclusion' | 'evidence' | 'action';
+  explanation: string;
+}
+
+export interface AttentionAnalysisData {
+  overview: string;
+  tags: string[];
+  highlights: AttentionHighlight[];
+  quality: {
+    level: 'high' | 'medium' | 'low';
+    evidenceDensity: 'high' | 'medium' | 'low';
+    reasons: string[];
+  };
+  readingGuide: {
+    estimatedMinutes: number;
+    priorityBlockIds: string[];
+    skippableBlockIds: string[];
+  };
+}
+
+export type ArticleArtifactKind =
+  | 'title-translation'
+  | 'body-translation'
+  | 'attention-analysis';
+
+export interface ArticleArtifact {
+  id: string;
+  articleId: string;
+  kind: ArticleArtifactKind;
+  contentHash?: string;
+  titleHash?: string;
+  targetLanguage?: string;
+  provider: 'ai' | 'google';
+  model: string;
+  aiProviderId?: string;
+  aiProviderName?: string;
+  promptVersion: number;
+  status: 'pending' | 'running' | 'partial' | 'completed' | 'failed';
+  data?: TitleTranslationData | BodyTranslationData | AttentionAnalysisData;
+  generatedAt?: number;
+  updatedAt: number;
+  error?: string;
+}
+
+export type ArticleProcessingJobType =
+  | 'translate-title'
+  | 'translate-body'
+  | 'analyze-attention'
+  | 'score-relevance';
+
+export interface ArticleProcessingJob {
+  id: string;
+  articleId: string;
+  type: ArticleProcessingJobType;
+  artifactId: string;
+  status: 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  contentHash?: string;
+  targetLanguage?: string;
+  provider?: 'ai' | 'google';
+  aiProviderId?: string;
+  aiProviderName?: string;
+  model?: string;
+  runId?: string;
+  nextChunkIndex: number;
+  totalChunks: number;
+  retryCount: number;
+  createdAt: number;
+  updatedAt: number;
+  lastError?: string;
 }
 
 export interface Article {
@@ -51,6 +187,8 @@ export interface Digest {
   date: string;
   items: DigestItem[];
   model: string;
+  aiProviderId?: string;
+  aiProviderName?: string;
   generatedAt: number;
   fullContent?: string;
   createdAt: number;
@@ -107,6 +245,15 @@ export interface FilterAction {
   value?: string; // for add-tag, the tag name
 }
 
+export interface AIProviderSettings {
+  id: string;
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  enabled: boolean;
+}
+
 export interface Settings {
   language: 'zh' | 'en';
   theme: 'light' | 'dark' | 'auto';
@@ -129,11 +276,22 @@ export interface Settings {
   translationTargetLanguage: string;
   translationSourceLanguage?: string;
   translationAutoFetch: boolean;
+  aiAutoTranslateTitles: boolean;
+  aiTitleTranslationBatchLimit: number;
+  bodyTranslationProvider: 'ai' | 'google';
+  defaultTranslationView: 'original' | 'translated' | 'bilingual';
   enableAI: boolean;
   aiApiEndpoint: string;
   aiApiKey: string;
   aiModel: string;
+  aiPrimaryProviderId: string;
+  aiPrimaryProviderName: string;
+  aiFallbackProviders: AIProviderSettings[];
   aiAutoSummarize: boolean;
+  aiAttentionAnalysisEnabled: boolean;
+  aiAutoAnalyzeOnOpen: boolean;
+  showAttentionHighlights: boolean;
+  showArticleQuality: boolean;
   autoFetchFullContent: boolean;
   articleTitleLines: 1 | 2 | 3;
   articleExcerptLines: 1 | 2 | 3;
