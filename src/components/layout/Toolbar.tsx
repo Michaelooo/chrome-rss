@@ -12,9 +12,18 @@ export const Toolbar: React.FC = () => {
   const { uiState, setUIState, loadFeeds, loadFolders } = useAppStore();
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showStorageDialog, setShowStorageDialog] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = () => {
-    loadFeeds();
+    if (refreshing) return;
+    setRefreshing(true);
+    chrome.runtime?.sendMessage({ type: 'UPDATE_ALL_FEEDS', force: true }, () => {
+      setRefreshing(false);
+      if (chrome.runtime.lastError) {
+        console.error(chrome.runtime.lastError.message);
+      }
+      loadFeeds();
+    });
   };
 
   const handleImportCompleted = () => {
@@ -31,8 +40,9 @@ export const Toolbar: React.FC = () => {
             size="sm"
             onClick={handleRefresh}
             title={t('toolbar.refresh')}
+            disabled={refreshing}
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
 

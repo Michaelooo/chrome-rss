@@ -88,6 +88,20 @@ export const ArticleList: React.FC = () => {
     };
   }, [articles]);
 
+  // Reload articles when the background service worker reports new data
+  useEffect(() => {
+    const listener = (message: { type?: string }) => {
+      if (message?.type === 'FEEDS_UPDATED') {
+        loadArticles();
+      }
+    };
+    chrome.runtime?.onMessage?.addListener(listener);
+    return () => {
+      chrome.runtime?.onMessage?.removeListener(listener);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!settings?.aiAutoTranslateTitles || !settings.enableAI || articles.length === 0) return;
     if (titleTranslationInFlightRef.current) return;

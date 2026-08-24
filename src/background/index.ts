@@ -21,10 +21,13 @@ import type { ImageRefererRuleRequest } from '@/lib/chrome/image-referer';
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('Extension installed:', details.reason);
 
-  if (details.reason === 'install') {
-    // Set up default alarm for feed updates
-    await setupUpdateAlarm();
-  }
+  // Always (re)create alarms so periodic updates survive extension reloads/updates
+  await setupUpdateAlarm();
+});
+
+// Alarms can be cleared when the extension is reloaded; recreate on browser startup
+chrome.runtime.onStartup.addListener(async () => {
+  await setupUpdateAlarm();
 });
 
 // Set up periodic alarm for feed updates
